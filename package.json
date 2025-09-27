@@ -14,7 +14,8 @@
     "next": "15.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "style-props-html": "^0.0.8"
+    "style-props-html": "^0.0.8",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

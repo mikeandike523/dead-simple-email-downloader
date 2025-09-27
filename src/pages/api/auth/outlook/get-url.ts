@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomString, signState } from "@/utils/oidc-state";
+import { v4 as uuidv4 } from "uuid";
+import { dbExec } from "@/utils/db";
 
 const tenant = process.env.AZURE_TENANT || "common";
 const authBase = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`;
@@ -12,7 +14,10 @@ const SCOPES = [
   "Mail.Read.Shared",
 ];
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   try {
     const clientId = process.env.AZURE_CLIENT_ID!;
     const redirectUri = process.env.OAUTH_REDIRECT_URL!;
@@ -32,8 +37,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // optional: prompt=select_account for easier account switching
     url.searchParams.set("prompt", "select_account");
 
+    const pollToken = uuidv4();
+
+    const dbResponse = await dbExec(
+      `
+INSERT INTO pending_logins (poll_token) VALUES (?)     
+      `,
+      [pollToken]
+    );
+
+    const affectedRows = dbResponse.affectedRows;
+
+    if (affectedRows !== 1) {
+      res.status(500).json({
+        error: "Failed to insert poll token into database",
+        ...(dbResponse.warningStatus
+          ? { warningStatus: dbResponse.warningStatus }
+          : {}),
+      });
+    }
+
     // Return JSON so your CLI can parse/print it easily
-    res.status(200).json(url.toString());
+    res.status(200).json({
+      pollToken,
+      url: url.toString(),
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message ?? "internal_error" });
   }
