@@ -1,5 +1,5 @@
 // src/pages/api/auth/outlook/check-pending-login.ts
-import { dbQuery } from "@/utils/db";
+import { dbQuery } from "@/server/db";
 import isJsonLikeContentType from "@/utils/isJsonLikeContentType";
 import { NextApiRequest, NextApiResponse } from "next";
 import { sign as signJwtHS } from "@/utils/jwt-sign"; // helper shown below

@@ -54,7 +54,14 @@ export const pool: mysql.Pool =
     queueLimit: 0,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
+    timezone: 'Z',       // ensure UTC, no conversion
+    dateStrings: true    // return TIMESTAMP/DATETIME as strings
   });
+
+// Likely extra, but there just to be safe
+pool.on('connection', (conn) => {
+  conn.query("SET time_zone = '+00:00'");
+});
 
 if (process.env.NODE_ENV !== 'production') {
   global._mysqlPool = pool;

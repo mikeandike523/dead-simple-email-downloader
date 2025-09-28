@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { randomString, signState } from "@/utils/oidc-state";
+import { randomString, signState } from "@/server/oidc-state";
 import { v4 as uuidv4 } from "uuid";
-import { dbExec } from "@/utils/db";
+import { dbExec } from "@/server/db";
 
 const tenant = process.env.AZURE_TENANT || "common";
 const authBase = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`;

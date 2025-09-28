@@ -1,9 +1,9 @@
 import { GetServerSideProps } from "next";
 import React, { useEffect } from "react";
-import { dbExec } from "@/utils/db";
+import { dbExec } from "@/server/db";
 import { decodeJwt } from "jose"; // lightweight decode; see note below re: full verification
 import { sign as signJwtHS } from "@/utils/jwt-sign"; // small helper you have/ create (HS256)
-import { verifyState } from "@/utils/oidc-state"; // pair to signState
+import { verifyState } from "@/server/oidc-state"; // pair to signState
 // If you don't have verifyState, implement it to HMAC-verify and JSON-parse the payload you produced in signState.
 
 const tenant = process.env.AZURE_TENANT || "common";
