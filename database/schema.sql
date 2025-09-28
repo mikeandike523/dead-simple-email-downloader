@@ -9,6 +9,9 @@ CREATE TABLE oauth_tokens (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Allows CLIs to poll the logins state
+-- Each new login request creates a unique poll_token (akin to CSRF token)
+-- A cron job will be made later to clean up completed or stranded poll_tokens
 CREATE TABLE pending_logins (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
@@ -17,6 +20,9 @@ CREATE TABLE pending_logins (
 
     -- Flag set true once the redirect lands and tokens were saved
     ok BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- The openid_sub of the user who completed the login so we can return a signed JWT
+    openid_sub VARCHAR(255) NULL,
 
     -- When created + when touched
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

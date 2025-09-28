@@ -23,14 +23,14 @@ need_cmd() {
 }
 
 urlencode() {
-  python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$1"
+  python -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$1"
 }
 
 # ---- Checks ----------------------------------------------------------------
 
 need_cmd atlas
 need_cmd docker
-need_cmd python3
+need_cmd python
 
 [[ -f ".env" ]] || die "Missing .env in current directory"
 set -a

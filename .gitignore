@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 .venv
+
+# CLI will store its login info
+jwt.json
+
+__pycache__
+**/__pycache__
