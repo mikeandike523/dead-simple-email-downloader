@@ -1,3 +1,4 @@
+import json
 from time import sleep
 import webbrowser
 
@@ -82,7 +83,7 @@ def outlook_login():
                         )
                     )
                     return -1
-                if not isinstance(resp.data, str):
+                if not isinstance(resp.data, dict):
                     print(
                         colored(
                             "Got successful HTTP status but invalid response data.",
@@ -93,10 +94,9 @@ def outlook_login():
 
                 print(colored("\nLogin successful!", "green"))
 
-                jwt_string = resp.data
-                with open(".dsed/jwt.txt", "w", encoding="utf-8") as f:
-                    f.write(jwt_string)
-                    print(colored("JWT saved to .dsed/jwt.txt", "green"))
+                with open(".dsed/jwt.json", "w", encoding="utf-8") as f:
+                    f.write(json.dumps(resp.data))
+                    print(colored("JWT saved to .dsed/jwt.json", "green"))
             else:
                 if resp.status != 403:  # 403 is known error case -> not logged in yet
                     print(

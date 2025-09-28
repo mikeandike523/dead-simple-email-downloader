@@ -3,6 +3,8 @@ import { dbQuery } from "@/utils/db";
 import isJsonLikeContentType from "@/utils/isJsonLikeContentType";
 import { NextApiRequest, NextApiResponse } from "next";
 import { sign as signJwtHS } from "@/utils/jwt-sign"; // helper shown below
+import { ISSUER } from "@/server/auth";
+import { v4 as uuidv4 } from "uuid";
 
 export default async function checkPendingLogin(
   req: NextApiRequest,
@@ -64,13 +66,18 @@ export default async function checkPendingLogin(
     [pollToken]
   );
 
-  // Sign a short-lived JWT for CLI
+  const ttl = 12 * 60 * 60; // 12h in seconds (optional: keep "12h" if your helper accepts it)
+
   const jwt = await signJwtHS(
-    { sub: openid_sub, aud: "cli", iss: "your-app" },
-    "12h" // expiresIn; tune to your needs
+    { sub: openid_sub, aud: "cli", iss: ISSUER, jti: uuidv4() },
+    ttl // or "12h" if your helper takes strings
   );
 
-  // CORS header on success as well
+  // Better response shape for   CLIs:
   res.setHeader("Access-Control-Allow-Origin", "*");
-  return res.status(200).json(jwt);
+  return res.status(200).json({
+    jwt,
+    token_type: "Bearer",
+    expires_in: ttl,
+  });
 }
