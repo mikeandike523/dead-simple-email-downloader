@@ -120,12 +120,12 @@ def outlook_me():
         return -1
 
     with open(jwt_path, "r", encoding="utf-8") as f:
-        jwt = json.load(f)
+        jwt_data = json.load(f)
 
     resp = summarize_response(
         requests.get(
             "http://localhost:3000/api/outlook/me",
-            headers={"Authorization": f"Bearer {jwt['access_token']}"},
+            headers={"Authorization": f"Bearer {jwt_data['jwt']}"},
         )
     )
 
