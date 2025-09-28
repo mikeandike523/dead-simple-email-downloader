@@ -2,30 +2,26 @@
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getAuth, type AuthUser } from "./auth";
 
-declare module "next" {
-  interface NextApiRequest {
-    user?: AuthUser;
-  }
+export interface AuthedNextApiRequest extends NextApiRequest {
+  user: AuthUser;
 }
 
-/**
- * Protect API routes. Attaches req.user on success.
- * Returns 401 with WWW-Authenticate on failure.
- */
-export function withAuth(handler: NextApiHandler): NextApiHandler {
-  return async (req: NextApiRequest, res: NextApiResponse) => {
+export type AuthedHandler<T = any> =
+  (req: AuthedNextApiRequest, res: NextApiResponse<T>) => void | Promise<void>;
+
+export function withAuth<T = any>(handler: AuthedHandler<T>): NextApiHandler<T> {
+  return async (req: NextApiRequest, res: NextApiResponse<T>) => {
     const user = await getAuth(req);
     if (!user) {
       if (req.headers.authorization?.startsWith("Bearer ")) {
-        // looks like a CLI attempt, hint Bearer usage
-        res.setHeader(
-          "WWW-Authenticate",
-          'Bearer realm="api", error="invalid_token"'
-        );
+        res.setHeader("WWW-Authenticate", 'Bearer realm="api", error="invalid_token"');
       }
-      return res.status(401).json({ error: "unauthorized" });
+      return res.status(401).json({ error: "unauthorized" } as any);
     }
-    req.user = user;
-    return handler(req, res);
+
+    const authedReq = req as AuthedNextApiRequest;
+    authedReq.user = user;
+
+    return handler(authedReq, res);
   };
 }

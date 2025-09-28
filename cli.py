@@ -1,4 +1,5 @@
 import json
+import os
 from time import sleep
 import webbrowser
 
@@ -110,6 +111,37 @@ def outlook_login():
         print("Login cancelled by user.")
         return -1
 
+@outlook.command("me")
+def outlook_me():
+    jwt_path = ".dsed/jwt.json"
+
+    if not os.path.exists(jwt_path):
+        print(colored("JWT not found. Please login first.", "red"))
+        return -1
+
+    with open(jwt_path, "r", encoding="utf-8") as f:
+        jwt = json.load(f)
+
+    resp = summarize_response(
+        requests.get(
+            "http://localhost:3000/api/outlook/me",
+            headers={"Authorization": f"Bearer {jwt['access_token']}"},
+        )
+    )
+
+    if not resp.ok:
+        if resp.status == 401:
+            print(colored("JWT expired or invalid. Please login again.", "red"))
+            return -1
+        else:
+            print(colored("Failed to retrieve user information:", "red"))
+            print(str(resp))
+            return -1
+        
+    print(colored("\nUser information:", "green"))
+    user_data = resp.data
+    for key, value in user_data.items():
+        print(f"{key}: {value}")
 
 if __name__ == "__main__":
     cli()

@@ -1,8 +1,9 @@
 import { withAuth } from "@/server/withAuth"
-import { NextApiRequest, NextApiResponse } from "next"
+import { NextApiResponse } from "next"
+import { AuthedNextApiRequest } from "@/server/withAuth"
 
-const handler = async (req: NextApiRequest, res: NextApiResponse) => {
-    
+const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
+    return res.status(200).json(req.user)
 }
 
 export default withAuth(handler)
