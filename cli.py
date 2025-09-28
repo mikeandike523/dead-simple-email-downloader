@@ -130,6 +130,8 @@ def outlook_me():
     )
 
     if not resp.ok:
+        with open("error.txt", "w", encoding="utf-8") as f:
+            f.write(resp.text)
         if resp.status == 401:
             print(colored("JWT expired or invalid. Please login again.", "red"))
             return -1
