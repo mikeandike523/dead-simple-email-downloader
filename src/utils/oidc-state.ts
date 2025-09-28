@@ -10,7 +10,7 @@ export function randomString(bytes = 16) {
   return enc(crypto.randomBytes(bytes));
 }
 
-export function signState(payload: { n: string; ts: number }) {
+export function signState(payload: { n: string; ts: number; pt: string }) {
   const body = Buffer.from(JSON.stringify(payload));
   const sig = crypto.createHmac("sha256", SECRET).update(body).digest();
   return `${enc(body)}.${enc(sig)}`;
@@ -25,11 +25,11 @@ export function verifyState(signed: string, maxAgeSec = 600) {
   const ok = crypto.timingSafeEqual(expectedSig, dec(sigB64));
   if (!ok) return null;
 
-  const parsed = JSON.parse(body.toString()) as { n: string; ts: number };
-  if (!parsed?.n || !parsed?.ts) return null;
+  const parsed = JSON.parse(body.toString()) as { n: string; ts: number; pt: string};
+  if (!parsed?.n || !parsed?.ts ||!parsed?.pt) return null;
 
   if (Math.floor(Date.now() / 1000) - parsed.ts > maxAgeSec) return null;
-  return parsed; // { n, ts }
+  return parsed; // { n, ts, pt }
 }
 
 export function decodeJwtPayload<T = any>(jwt: string): T {

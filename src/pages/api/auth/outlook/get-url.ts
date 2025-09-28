@@ -22,9 +22,15 @@ export default async function handler(
     const clientId = process.env.AZURE_CLIENT_ID!;
     const redirectUri = process.env.OAUTH_REDIRECT_URL!;
     const nonce = randomString(16);
+    const pollToken = uuidv4();
+
 
     // state carries nonce + timestamp, HMAC-signed (no server storage needed)
-    const state = signState({ n: nonce, ts: Math.floor(Date.now() / 1000) });
+    const state = signState({   
+      n: nonce,
+      ts: Math.floor(Date.now() / 1000),
+      pt: pollToken,
+    });
 
     const url = new URL(authBase);
     url.searchParams.set("client_id", clientId);
@@ -37,7 +43,6 @@ export default async function handler(
     // optional: prompt=select_account for easier account switching
     url.searchParams.set("prompt", "select_account");
 
-    const pollToken = uuidv4();
 
     const dbResponse = await dbExec(
       `

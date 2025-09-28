@@ -42,8 +42,8 @@ next-env.d.ts
 
 .venv
 
-# CLI will store its login info
-jwt.json
+# App State Including JWTs
+.dsed
 
 __pycache__
 **/__pycache__
