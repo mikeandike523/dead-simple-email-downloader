@@ -3,7 +3,10 @@ import {
   dateToSqlUtcTimestamp,
   sqlUtcTimestampToDate,
 } from "../utils/time-and-date";
-import summarizeResponse, { ResponseSummary } from "@/utils/summarizeResponse";
+import summarizeResponse, {
+  JsonValue,
+  ResponseSummary,
+} from "@/utils/summarizeResponse";
 import { fetchWithTimeout } from "@/utils/fetchWithTimeout";
 import { PoolConnection } from "mysql2/promise";
 
@@ -275,7 +278,9 @@ export function buildGraphQueryString(params?: UrlParams): string {
   return qs ? `?${qs}` : "";
 }
 
-export async function callGraphJSON({
+export async function callGraphJSON<
+  T extends JsonValue | undefined | unknown = unknown
+>({
   minMinutesRemaining = 30,
   openidSub,
   route,
@@ -284,6 +289,8 @@ export async function callGraphJSON({
   body, // optional JSON body for POST/PUT/PATCH-like calls
   version = "v1.0", // or "beta"
   baseUrl = "https://graph.microsoft.com",
+  timeoutMs,
+  silent = false,
 }: {
   minMinutesRemaining?: number;
   openidSub: string;
@@ -293,11 +300,35 @@ export async function callGraphJSON({
   body?: unknown;
   version?: "v1.0" | "beta";
   baseUrl?: string;
-}): Promise<ResponseSummary> {
-  await ensureAccessToken(openidSub, minMinutesRemaining);
-  const token = await getCurrentAccessToken(openidSub);
+  timeoutMs?: number; // optional fetch timeout in milliseconds
+  silent?: boolean; // if true, suppress console.info logs
+}) {
+  const now =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? () => performance.now()
+      : () => Date.now();
 
   const cleanRoute = route.startsWith("/") ? route : `/${route}`;
+
+  // --- ensureAccessToken timing ---
+  const tEnsureStart = now();
+  try {
+    await ensureAccessToken(openidSub, minMinutesRemaining);
+  } catch (err) {
+    const ensureMs = now() - tEnsureStart;
+    if (!silent) {
+      console.info(
+        `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+          0
+        )}ms | fetch=skipped (token ensure failed) | error=${(err as Error)?.message ?? err}`
+      );
+    }
+    throw err;
+  }
+  const ensureMs = now() - tEnsureStart;
+
+  const token = await getCurrentAccessToken(openidSub);
+
   const qs = buildGraphQueryString(urlParams);
   const url = `${baseUrl}/${version}${cleanRoute}${qs}`;
 
@@ -315,6 +346,32 @@ export async function callGraphJSON({
     init.body = JSON.stringify(body);
   }
 
-  const res = await fetch(url, init);
-  return await summarizeResponse(res);
+  // --- fetch timing ---
+  const tFetchStart = now();
+  try {
+    const res = await fetchWithTimeout(url, { ...init, timeoutMs });
+    const fetchMs = now() - tFetchStart;
+
+    if (!silent) {
+      console.info(
+        `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+          0
+        )}ms | graphFetch=${fetchMs.toFixed(0)}ms`
+      );
+    }
+
+    return await summarizeResponse<T>(res);
+  } catch (err) {
+    const fetchMs = now() - tFetchStart;
+    if (!silent) {
+      console.info(
+        `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+          0
+        )}ms | graphFetch=${fetchMs.toFixed(
+          0
+        )}ms (failed) | error=${(err as Error)?.message ?? err}`
+      );
+    }
+    throw err;
+  }
 }

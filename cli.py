@@ -2,6 +2,7 @@ import json
 import os
 from time import sleep
 import webbrowser
+import shutil
 
 import click
 import requests
@@ -9,6 +10,7 @@ from termcolor import colored
 
 
 from pysrc.utils.summarize_response import summarize_response
+from pysrc.call_route import call_route
 
 
 @click.group()
@@ -111,39 +113,59 @@ def outlook_login():
         print("Login cancelled by user.")
         return -1
 
+
 @outlook.command("me")
 def outlook_me():
-    jwt_path = ".dsed/jwt.json"
-
-    if not os.path.exists(jwt_path):
-        print(colored("JWT not found. Please login first.", "red"))
+    resp = call_route("/outlook/me", "Fetching user info...")
+    if resp is None:
         return -1
-
-    with open(jwt_path, "r", encoding="utf-8") as f:
-        jwt_data = json.load(f)
-
-    resp = summarize_response(
-        requests.get(
-            "http://localhost:3000/api/outlook/me",
-            headers={"Authorization": f"Bearer {jwt_data['jwt']}"},
-        )
-    )
-
-    if not resp.ok:
-        with open("error.txt", "w", encoding="utf-8") as f:
-            f.write(resp.text)
-        if resp.status == 401:
-            print(colored("JWT expired or invalid. Please login again.", "red"))
-            return -1
-        else:
-            print(colored("Failed to retrieve user information:", "red"))
-            print(str(resp))
-            return -1
-        
     print(colored("\nUser information:", "green"))
     user_data = resp.data
     for key, value in user_data.items():
         print(f"{key}: {value}")
+
+
+@outlook.command("folders")
+def outlook_folders():
+    resp = call_route("/outlook/folders", "Fetching folder info...")
+    if resp is None:
+        return -1
+    with open(".dsed/debug/folders.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(resp.data, indent=2))
+        print(colored("Folder information saved to .dsed/debug/folders.json", "green"))
+
+def index_folder(node):
+    ...
+
+
+@outlook.command("index")
+def outlook_index():
+    if os.path.isdir(".dsed/index"):
+        shutil.rmtree(".dsed/index")
+    os.makedirs(".dsed/index", exist_ok=True)
+    resp_folders = call_route("/outlook/folders", "Fetching folder info...")
+    with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(resp_folders.data, indent=2))
+        print(colored("Folder information saved to.dsed/index/folders.json", "green"))
+    folder_data = resp_folders.data
+    folders = []
+
+    def recursion(node, prior):
+        folders.append(("\u2192".join(prior + (node["name"],)),node))
+        for child in node["children"]:
+            recursion(child, prior + (node["name"],))
+
+    for folder in folder_data:
+        recursion(folder, tuple())
+
+    print(f"Found {len(folders)} folders:")
+    for folder_name, _ in folders:
+        print("\t"+folder_name)
+
+    for i, (folder_name, node) in enumerate(folders):
+        print(f"Indexing Folder {i+1}/{len(folders)}: {folder_name}")
+        index_folder(node)
+
 
 if __name__ == "__main__":
     cli()

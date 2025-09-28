@@ -26,19 +26,21 @@ function truncate(s: string, max = 200): string {
   return s.slice(0, Math.max(0, max - 3)) + "...";
 }
 
-export class ResponseSummary {
+export class ResponseSummary<
+  T extends JsonValue | undefined | unknown = unknown
+> {
   readonly ok: boolean;
   readonly status: number;
   readonly has_response_body: boolean;
   readonly text: string;
-  readonly data?: JsonValue; // Present only if Content-Type is JSON AND parse succeeded
+  readonly data?: T; // Present only if Content-Type is JSON AND parse succeeded
 
   constructor(args: {
     ok: boolean;
     status: number;
     has_response_body: boolean;
     text: string;
-    data?: JsonValue;
+    data?: T;
   }) {
     this.ok = args.ok;
     this.status = args.status;
@@ -76,7 +78,9 @@ export class ResponseSummary {
  *
  * Uses resp.clone() so the original Response remains readable by callers.
  */
-export default async function summarizeResponse(resp: Response): Promise<ResponseSummary> {
+export default async function summarizeResponse<
+  T extends JsonValue | undefined | unknown = unknown
+>(resp: Response) {
   // Clone once for bytes and once for text to avoid .bodyUsed conflicts
   const bytesClone = resp.clone();
   const textClone = resp.clone();
@@ -113,12 +117,12 @@ export default async function summarizeResponse(resp: Response): Promise<Respons
     }
   }
 
-  return new ResponseSummary({
+  return new ResponseSummary<T>({
     ok: resp.ok,
     status: resp.status,
     has_response_body: hasBody,
     text,
-    data,
+    data: data as T,
   });
 }
 
