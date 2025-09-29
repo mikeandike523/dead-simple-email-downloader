@@ -65,7 +65,7 @@ async function enumerateAllFolders(
   openidSub: string
 ): Promise<GraphMailFolder[]> {
   const SELECT = "$select=id,displayName,parentFolderId,isHidden";
-  const TOP = "$top=50";
+  const TOP = "$top=100";
   const INCLUDE = "includeHiddenFolders=true";
 
   const rootChildren = await graphGetAll<GraphMailFolder>(

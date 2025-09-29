@@ -127,23 +127,35 @@ def outlook_me():
 
 @outlook.command("folders")
 def outlook_folders():
-    resp = call_route("/outlook/folders", "Fetching folder info...")
+    resp = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
     if resp is None:
         return -1
     with open(".dsed/debug/folders.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(resp.data, indent=2))
         print(colored("Folder information saved to .dsed/debug/folders.json", "green"))
 
-def index_folder(node):
-    ...
 
+def index_folder(node):
+    resp = call_route(
+        "/outlook/indexing/get-delta-query",
+        "Fetching folder info...",
+        method="POST",
+        json_body=node["id"],
+        save_debug_to=f".dsed/debug/folder_indices/{node['id']}.json",
+    )
+    if resp is None:
+        return False
+    return True
 
 @outlook.command("index")
 def outlook_index():
     if os.path.isdir(".dsed/index"):
         shutil.rmtree(".dsed/index")
     os.makedirs(".dsed/index", exist_ok=True)
-    resp_folders = call_route("/outlook/folders", "Fetching folder info...")
+    resp_folders = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
+    if resp_folders is None:
+        return -1
+
     with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(resp_folders.data, indent=2))
         print(colored("Folder information saved to.dsed/index/folders.json", "green"))
@@ -151,7 +163,7 @@ def outlook_index():
     folders = []
 
     def recursion(node, prior):
-        folders.append(("\u2192".join(prior + (node["name"],)),node))
+        folders.append(("\u2192".join(prior + (node["name"],)), node))
         for child in node["children"]:
             recursion(child, prior + (node["name"],))
 
@@ -160,11 +172,14 @@ def outlook_index():
 
     print(f"Found {len(folders)} folders:")
     for folder_name, _ in folders:
-        print("\t"+folder_name)
+        print("\t" + folder_name)
 
     for i, (folder_name, node) in enumerate(folders):
         print(f"Indexing Folder {i+1}/{len(folders)}: {folder_name}")
-        index_folder(node)
+
+        if not index_folder(node):
+            print(colored(f"Failed to index {folder_name}", "red"))
+            return -1
 
 
 if __name__ == "__main__":

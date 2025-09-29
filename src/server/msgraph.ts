@@ -278,6 +278,56 @@ export function buildGraphQueryString(params?: UrlParams): string {
   return qs ? `?${qs}` : "";
 }
 
+// --- helpers (co-locate in this file or a nearby util) ----------------------
+
+const DEFAULT_MAX_ATTEMPTS = 5;
+const BASE_DELAY_MS = 300;
+const MAX_BACKOFF_MS = 8_000;
+const JITTER_RATIO = 0.2; // +/-20%
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Parse Retry-After (seconds or HTTP-date) and Graph variants. */
+function getRetryAfterMs(headers: Headers): number | null {
+  // Standard header (seconds or HTTP-date)
+  const ra = headers.get("Retry-After");
+  if (ra) {
+    const secs = Number(ra);
+    if (!Number.isNaN(secs)) return Math.max(0, secs * 1000);
+    const date = Date.parse(ra);
+    if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  }
+
+  // Common Microsoft variants (ms)
+  // Some services emit x-ms-retry-after-ms or retry-after-ms
+  const ms1 = headers.get("x-ms-retry-after-ms");
+  if (ms1 && !Number.isNaN(Number(ms1))) return Math.max(0, Number(ms1));
+
+  const ms2 = headers.get("retry-after-ms"); // seen in a few Graph edges
+  if (ms2 && !Number.isNaN(Number(ms2))) return Math.max(0, Number(ms2));
+
+  return null;
+}
+
+function isRetriableStatus(status: number): boolean {
+  // 429: rate limited; 503: service unavailable
+  // (You can also choose to include 502/504 depending on your tolerance)
+  return status === 429 || status === 503;
+}
+
+function computeBackoffMs(attempt: number, explicitMs: number | null): number {
+  if (explicitMs !== null) return explicitMs;
+
+  const exp = Math.min(MAX_BACKOFF_MS, BASE_DELAY_MS * 2 ** (attempt - 1));
+  // apply jitter +/-20%
+  const jitter = exp * JITTER_RATIO;
+  const min = Math.max(0, exp - jitter);
+  const max = exp + jitter;
+  return Math.floor(min + Math.random() * (max - min));
+}
+
+// ----------------------------------------------------------------------------
+
 export async function callGraphJSON<
   T extends JsonValue | undefined | unknown = unknown
 >({
@@ -286,22 +336,22 @@ export async function callGraphJSON<
   route,
   method = "GET",
   urlParams,
-  body, // optional JSON body for POST/PUT/PATCH-like calls
-  version = "v1.0", // or "beta"
+  body,
+  version = "v1.0",
   baseUrl = "https://graph.microsoft.com",
   timeoutMs,
   silent = false,
 }: {
   minMinutesRemaining?: number;
   openidSub: string;
-  route: string; // e.g. "/me/messages" or "me/messages"
+  route: string;
   method?: HttpMethod;
   urlParams?: UrlParams;
   body?: unknown;
   version?: "v1.0" | "beta";
   baseUrl?: string;
-  timeoutMs?: number; // optional fetch timeout in milliseconds
-  silent?: boolean; // if true, suppress console.info logs
+  timeoutMs?: number;
+  silent?: boolean;
 }) {
   const now =
     typeof performance !== "undefined" && typeof performance.now === "function"
@@ -320,7 +370,9 @@ export async function callGraphJSON<
       console.info(
         `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
           0
-        )}ms | fetch=skipped (token ensure failed) | error=${(err as Error)?.message ?? err}`
+        )}ms | fetch=skipped (token ensure failed) | error=${
+          (err as Error)?.message ?? err
+        }`
       );
     }
     throw err;
@@ -332,46 +384,91 @@ export async function callGraphJSON<
   const qs = buildGraphQueryString(urlParams);
   const url = `${baseUrl}/${version}${cleanRoute}${qs}`;
 
-  const init: RequestInit = {
+  const baseHeaders: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  };
+
+  const initBase: RequestInit = {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
+    headers: baseHeaders,
   };
 
   if (body !== undefined && method !== "GET" && method !== "DELETE") {
-    (init.headers as Record<string, string>)["Content-Type"] =
-      "application/json";
-    init.body = JSON.stringify(body);
+    baseHeaders["Content-Type"] = "application/json";
+    (initBase as any).body = JSON.stringify(body);
   }
 
-  // --- fetch timing ---
-  const tFetchStart = now();
-  try {
-    const res = await fetchWithTimeout(url, { ...init, timeoutMs });
-    const fetchMs = now() - tFetchStart;
+  // --- fetch + retry (429/503 with Retry-After) -----------------------------
+  let attempt = 0;
+  let lastError: unknown = undefined;
 
-    if (!silent) {
-      console.info(
-        `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
-          0
-        )}ms | graphFetch=${fetchMs.toFixed(0)}ms`
-      );
-    }
+  for (;;) {
+    attempt++;
+    const tFetchStart = now();
+    try {
+      const res = await fetchWithTimeout(url, { ...initBase, timeoutMs });
+      const fetchMs = now() - tFetchStart;
 
-    return await summarizeResponse<T>(res);
-  } catch (err) {
-    const fetchMs = now() - tFetchStart;
-    if (!silent) {
-      console.info(
-        `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
-          0
-        )}ms | graphFetch=${fetchMs.toFixed(
-          0
-        )}ms (failed) | error=${(err as Error)?.message ?? err}`
-      );
+      if (!res.ok && isRetriableStatus(res.status) && attempt < DEFAULT_MAX_ATTEMPTS) {
+        const retryAfterMs = getRetryAfterMs(res.headers);
+        const delayMs = computeBackoffMs(attempt, retryAfterMs);
+
+        if (!silent) {
+          console.info(
+            `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+              0
+            )}ms | graphFetch=${fetchMs.toFixed(
+              0
+            )}ms | status=${res.status} -> retrying in ${delayMs}ms (attempt ${attempt}/${DEFAULT_MAX_ATTEMPTS})`
+          );
+        }
+
+        await sleep(delayMs);
+        continue; // retry loop
+      }
+
+      if (!silent) {
+        console.info(
+          `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+            0
+          )}ms | graphFetch=${fetchMs.toFixed(0)}ms`
+        );
+      }
+
+      // On final attempt (or success), summarize and return
+      return await summarizeResponse<T>(res);
+    } catch (err) {
+      lastError = err;
+      const fetchMs = now() - tFetchStart;
+
+      // Retry on transient network failures up to attempts limit
+      if (attempt < DEFAULT_MAX_ATTEMPTS) {
+        const delayMs = computeBackoffMs(attempt, null);
+        if (!silent) {
+          console.info(
+            `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+              0
+            )}ms | graphFetch=${fetchMs.toFixed(
+              0
+            )}ms (network error) -> retrying in ${delayMs}ms (attempt ${attempt}/${DEFAULT_MAX_ATTEMPTS}) | error=${
+              (err as Error)?.message ?? err
+            }`
+          );
+        }
+        await sleep(delayMs);
+        continue;
+      }
+
+      // Out of attempts: rethrow last network error (matches your current behavior)
+      if (!silent) {
+        console.info(
+          `[callGraphJSON] ${method} ${cleanRoute} | retries exhausted | error=${
+            (err as Error)?.message ?? err
+          }`
+        );
+      }
+      throw err;
     }
-    throw err;
   }
 }

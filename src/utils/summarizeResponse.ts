@@ -26,6 +26,74 @@ function truncate(s: string, max = 200): string {
   return s.slice(0, Math.max(0, max - 3)) + "...";
 }
 
+const NO_BODY_STATUS = new Set([204, 304]);
+
+function headerImpliesNoBody(resp: Response): boolean {
+  const cl = resp.headers.get("Content-Length");
+  if (cl && Number(cl) === 0) return true;
+  return false;
+}
+
+async function peekHasBody(resp: Response): Promise<boolean> {
+  if (NO_BODY_STATUS.has(resp.status)) return false;
+  if (headerImpliesNoBody(resp)) return false;
+  // If body is null (opaque/cors/head), treat as no body
+  if (!resp.body) return false;
+
+  // Clone once to safely read a single chunk
+  const peekClone = resp.clone();
+  const reader = peekClone.body!.getReader();
+  try {
+    const { value, done } = await reader.read();
+    // If we read something, there *is* a body; if `done` true on first read, it's empty.
+    return !!(value && value.byteLength > 0) || !done;
+  } catch {
+    // If reading fails, be conservative and say "no body"
+    return false;
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+}
+
+export function stripUtf8Bom(s: string): string {
+  return s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s;
+}
+
+async function getTextSafely(resp: Response): Promise<string> {
+  // Try .text() first (honors declared charset)
+  try {
+    return await resp.clone().text();
+  } catch {
+    // Fallback: manual decode from bytes
+    try {
+      const ab = await resp.clone().arrayBuffer();
+      return new TextDecoder().decode(ab);
+    } catch {
+      return "";
+    }
+  }
+}
+
+type ProblemJson = {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  instance?: string;
+  error?: { code?: string; message?: string; innerError?: any } | string;
+};
+
+function tryProblemCode(d: JsonValue | undefined): string | undefined {
+  if (!d || typeof d !== "object") return undefined;
+  const pj = d as ProblemJson;
+  if (typeof pj.error === "string") return pj.error;
+  if (pj.error && typeof pj.error === "object" && "code" in pj.error) {
+    const code = (pj.error as any).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
 export class ResponseSummary<
   T extends JsonValue | undefined | unknown = unknown
 > {
@@ -33,7 +101,10 @@ export class ResponseSummary<
   readonly status: number;
   readonly has_response_body: boolean;
   readonly text: string;
-  readonly data?: T; // Present only if Content-Type is JSON AND parse succeeded
+  readonly data?: T;
+  readonly url?: string;
+  readonly contentType?: string | null;
+  readonly problemCode?: string;
 
   constructor(args: {
     ok: boolean;
@@ -41,18 +112,25 @@ export class ResponseSummary<
     has_response_body: boolean;
     text: string;
     data?: T;
+    url?: string;
+    contentType?: string | null;
+    problemCode?: string;
   }) {
     this.ok = args.ok;
     this.status = args.status;
     this.has_response_body = args.has_response_body;
     this.text = args.text;
     this.data = args.data;
+    this.url = args.url;
+    this.contentType = args.contentType;
+    this.problemCode = args.problemCode;
   }
 
-  /** Concise string similar to the Python __str__ */
   toString(): string {
     const statusIndicator = this.ok ? "✓" : "✗";
     const parts: string[] = [`${statusIndicator} ${this.status}`];
+
+    if (this.problemCode) parts.push(`[${this.problemCode}]`);
 
     if (!this.has_response_body) {
       parts.push("(no body)");
@@ -64,74 +142,52 @@ export class ResponseSummary<
       parts.push(`Text: ${textPreview}`);
     }
 
+    if (this.url) parts.push(`@ ${this.url}`);
     return parts.join(" | ");
+  }
+
+  /** Type-narrowing helper for callers */
+  hasJson(): this is ResponseSummary<Exclude<T, undefined>> {
+    return this.data !== undefined;
+  }
+
+  static async from<
+    T extends JsonValue | undefined | unknown = unknown
+  >(resp: Response) {
+    const hasBody = await peekHasBody(resp);
+
+    const contentType = resp.headers.get("Content-Type");
+    let text = "";
+    let data: JsonValue | undefined = undefined;
+
+    if (hasBody) {
+      text = stripUtf8Bom(await getTextSafely(resp));
+      if (isJsonContentType(contentType)) {
+        try {
+          data = JSON.parse(text) as JsonValue;
+        } catch {
+          // Keep text for diagnostics; leave data undefined
+        }
+      }
+    }
+
+    const summary = new ResponseSummary<T>({
+      ok: resp.ok,
+      status: resp.status,
+      has_response_body: hasBody,
+      text,
+      data: data as T,
+      url: (resp as any).url, // fetch Response usually exposes url
+      contentType,
+      problemCode: tryProblemCode(data),
+    });
+
+    return summary;
   }
 }
 
-/**
- * Summarize a fetch Response.
- * - ok: resp.ok
- * - status: resp.status
- * - has_response_body: true iff any bytes are present
- * - text: always set ("" if no body)
- * - data: only when Content-Type indicates JSON AND body parses
- *
- * Uses resp.clone() so the original Response remains readable by callers.
- */
 export default async function summarizeResponse<
   T extends JsonValue | undefined | unknown = unknown
 >(resp: Response) {
-  // Clone once for bytes and once for text to avoid .bodyUsed conflicts
-  const bytesClone = resp.clone();
-  const textClone = resp.clone();
-
-  // Detect body presence using raw bytes length
-  let bodyBytes: ArrayBuffer | null = null;
-  try {
-    bodyBytes = await bytesClone.arrayBuffer();
-  } catch {
-    // Some bodies (e.g., network errors) might fail to read; treat as empty
-    bodyBytes = null;
-  }
-  const hasBody = !!bodyBytes && bodyBytes.byteLength > 0;
-
-  // Always provide text; if no body, force ""
-  let text = "";
-  if (hasBody) {
-    try {
-      text = await textClone.text();
-    } catch {
-      text = ""; // decoding failure -> keep empty but preserve hasBody flag
-    }
-  }
-
-  // Parse JSON only when header explicitly indicates JSON
-  const contentType = resp.headers.get("Content-Type");
-  let data: JsonValue | undefined = undefined;
-  if (hasBody && isJsonContentType(contentType)) {
-    try {
-      // Parse from text so declared charset/decoding is respected
-      data = JSON.parse(text) as JsonValue;
-    } catch {
-      // Leave data undefined; keep text as-is
-    }
-  }
-
-  return new ResponseSummary<T>({
-    ok: resp.ok,
-    status: resp.status,
-    has_response_body: hasBody,
-    text,
-    data: data as T,
-  });
+  return ResponseSummary.from<T>(resp);
 }
-
-/* ---------- Example usage ----------
-async function demo() {
-  const r = await fetch("https://httpbin.org/json");
-  const s = await summarizeResponse(r);
-  console.log(s.toString()); // e.g., "✓ 200 | JSON: {...}"
-  // You still can read the original response (we used clone()):
-  // const again = await r.text();
-}
------------------------------------- */

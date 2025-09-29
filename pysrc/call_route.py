@@ -4,7 +4,7 @@ import time
 import threading
 import requests
 from termcolor import colored
-from typing import Any, Dict, Iterable, List, Tuple, Optional
+from typing import Any, Dict, Iterable, List, Tuple, Optional, Union
 
 from pysrc.utils.summarize_response import summarize_response
 
@@ -64,7 +64,7 @@ def call_route(
     route: str,
     prompt: str = "working...",
     params: Optional[Dict[str, Any]] = None,
-    json_body: Optional[Dict[str, Any]] = None,
+    json_body: Optional[Union[Dict[str, Any], str, int, float, None]] = None,
     method: Optional[str] = None,
     save_debug_to: Optional[str] = None,  # e.g. ".dsed/debug/folders.json"
 ):
