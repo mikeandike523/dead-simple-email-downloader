@@ -358,7 +358,17 @@ export async function callGraphJSON<
       ? () => performance.now()
       : () => Date.now();
 
-  const cleanRoute = route.startsWith("/") ? route : `/${route}`;
+  let url;
+  let cleanRoute;
+  if (!route.startsWith("http://") && !route.startsWith("https://")) {
+    cleanRoute = route.startsWith("/") ? route : `/${route}`;
+    const qs = buildGraphQueryString(urlParams);
+    url = `${baseUrl}/${version}${cleanRoute}${qs}`;
+  } else {
+    cleanRoute = route.split("?")[0].substring(baseUrl.length);
+    url = route;
+  }
+
 
   // --- ensureAccessToken timing ---
   const tEnsureStart = now();
@@ -381,8 +391,6 @@ export async function callGraphJSON<
 
   const token = await getCurrentAccessToken(openidSub);
 
-  const qs = buildGraphQueryString(urlParams);
-  const url = `${baseUrl}/${version}${cleanRoute}${qs}`;
 
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${token}`,
@@ -410,7 +418,11 @@ export async function callGraphJSON<
       const res = await fetchWithTimeout(url, { ...initBase, timeoutMs });
       const fetchMs = now() - tFetchStart;
 
-      if (!res.ok && isRetriableStatus(res.status) && attempt < DEFAULT_MAX_ATTEMPTS) {
+      if (
+        !res.ok &&
+        isRetriableStatus(res.status) &&
+        attempt < DEFAULT_MAX_ATTEMPTS
+      ) {
         const retryAfterMs = getRetryAfterMs(res.headers);
         const delayMs = computeBackoffMs(attempt, retryAfterMs);
 
@@ -418,9 +430,9 @@ export async function callGraphJSON<
           console.info(
             `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
               0
-            )}ms | graphFetch=${fetchMs.toFixed(
-              0
-            )}ms | status=${res.status} -> retrying in ${delayMs}ms (attempt ${attempt}/${DEFAULT_MAX_ATTEMPTS})`
+            )}ms | graphFetch=${fetchMs.toFixed(0)}ms | status=${
+              res.status
+            } -> retrying in ${delayMs}ms (attempt ${attempt}/${DEFAULT_MAX_ATTEMPTS})`
           );
         }
 

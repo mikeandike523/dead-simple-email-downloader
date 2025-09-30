@@ -136,51 +136,92 @@ def outlook_folders():
 
 
 def index_folder(node):
+    #  First, we call with no link, to get the starting point
     resp = call_route(
-        "/outlook/indexing/get-delta-query",
+        "/outlook/indexing/get-id-list",
         "Fetching folder info...",
         method="POST",
-        json_body=node["id"],
-        save_debug_to=f".dsed/debug/folder_indices/{node['id']}.json",
+        json_body={
+            "folderId": node["id"],
+        },
     )
     if resp is None:
         return False
+    if not isinstance(resp.data, dict):
+        print(
+            colored(
+                "Got successful HTTP status but invalid response data.",
+                "red",
+            )
+        )
+        return False
+    message_ids = resp.data["messageIds"]
+    print(f"Discovered {len(message_ids)} so far...")
+    next_link = resp.data.get("nextLink", None)
+    while next_link:
+        resp = call_route(
+            "/outlook/indexing/get-id-list",
+            "Fetching more message IDs...",
+            method="POST",
+            json_body={
+                "folderId": node["id"],
+                "nextLink": next_link,
+            },
+        )
+        if resp is None:
+            return False
+        if not isinstance(resp.data, dict):
+            print(
+                colored(
+                    "Got successful HTTP status but invalid response data.",
+                    "red",
+                )
+            )
+            return False
+        message_ids.extend(resp.data["messageIds"])
+        print(f"Discovered {len(message_ids)} so far...")
+        next_link = resp.data.get("nextLink", None)
+
+
     return True
 
 @outlook.command("index")
 def outlook_index():
-    if os.path.isdir(".dsed/index"):
-        shutil.rmtree(".dsed/index")
-    os.makedirs(".dsed/index", exist_ok=True)
-    resp_folders = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
-    if resp_folders is None:
-        return -1
-
-    with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(resp_folders.data, indent=2))
-        print(colored("Folder information saved to.dsed/index/folders.json", "green"))
-    folder_data = resp_folders.data
-    folders = []
-
-    def recursion(node, prior):
-        folders.append(("\u2192".join(prior + (node["name"],)), node))
-        for child in node["children"]:
-            recursion(child, prior + (node["name"],))
-
-    for folder in folder_data:
-        recursion(folder, tuple())
-
-    print(f"Found {len(folders)} folders:")
-    for folder_name, _ in folders:
-        print("\t" + folder_name)
-
-    for i, (folder_name, node) in enumerate(folders):
-        print(f"Indexing Folder {i+1}/{len(folders)}: {folder_name}")
-
-        if not index_folder(node):
-            print(colored(f"Failed to index {folder_name}", "red"))
+    try:
+        if os.path.isdir(".dsed/index"):
+            shutil.rmtree(".dsed/index")
+        os.makedirs(".dsed/index", exist_ok=True)
+        resp_folders = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
+        if resp_folders is None:
             return -1
 
+        with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
+            f.write(json.dumps(resp_folders.data, indent=2))
+            print(colored("Folder information saved to.dsed/index/folders.json", "green"))
+        folder_data = resp_folders.data
+        folders = []
+
+        def recursion(node, prior):
+            folders.append(("\u2192".join(prior + (node["name"],)), node))
+            for child in node["children"]:
+                recursion(child, prior + (node["name"],))
+
+        for folder in folder_data:
+            recursion(folder, tuple())
+
+        print(f"Found {len(folders)} folders:")
+        for folder_name, _ in folders:
+            print("\t" + folder_name)
+
+        for i, (folder_name, node) in enumerate(folders):
+            print(f"Indexing Folder {i+1}/{len(folders)}: {folder_name}")
+
+            if not index_folder(node):
+                print(colored(f"Failed to index {folder_name}", "red"))
+                return -1
+    except KeyboardInterrupt:
+        print("Process aborted by user.")
+        return -1
 
 if __name__ == "__main__":
     cli()
