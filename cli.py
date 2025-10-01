@@ -135,37 +135,15 @@ def outlook_folders():
         print(colored("Folder information saved to .dsed/debug/folders.json", "green"))
 
 
-def index_folder(node):
+def index_folder(node, resume):
     #  First, we call with no link, to get the starting point
-    resp = call_route(
-        "/outlook/indexing/get-id-list",
-        "Fetching folder info...",
-        method="POST",
-        json_body={
-            "folderId": node["id"],
-        },
-    )
-    if resp is None:
-        return False
-    if not isinstance(resp.data, dict):
-        print(
-            colored(
-                "Got successful HTTP status but invalid response data.",
-                "red",
-            )
-        )
-        return False
-    message_ids = resp.data["messageIds"]
-    print(f"Discovered {len(message_ids)} so far...")
-    next_link = resp.data.get("nextLink", None)
-    while next_link:
+    if not resume:
         resp = call_route(
             "/outlook/indexing/get-id-list",
-            "Fetching more message IDs...",
+            "Fetching folder info...",
             method="POST",
             json_body={
                 "folderId": node["id"],
-                "nextLink": next_link,
             },
         )
         if resp is None:
@@ -178,26 +156,79 @@ def index_folder(node):
                 )
             )
             return False
-        message_ids.extend(resp.data["messageIds"])
+        message_ids = resp.data["messageIds"]
         print(f"Discovered {len(message_ids)} so far...")
         next_link = resp.data.get("nextLink", None)
+        while next_link:
+            resp = call_route(
+                "/outlook/indexing/get-id-list",
+                "Fetching more message IDs...",
+                method="POST",
+                json_body={
+                    "folderId": node["id"],
+                    "nextLink": next_link,
+                },
+            )
+            if resp is None:
+                return False
+            if not isinstance(resp.data, dict):
+                print(
+                    colored(
+                        "Got successful HTTP status but invalid response data.",
+                        "red",
+                    )
+                )
+                return False
+            message_ids.extend(resp.data["messageIds"])
+            print(f"Discovered {len(message_ids)} so far...")
+            next_link = resp.data.get("nextLink", None)
+        with open(f".dsed/index/top-level-messages/{node['id']}.json", "w", encoding="utf-8") as f:
+            f.write(json.dumps(message_ids))
+            print(colored(f"Indexed messages in folder {node['name']} ({node['id']}).", "green"))
+    else:
+        if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
+            print(
+                colored(
+                    f"No messages found in folder {node['name']} ({node['id']}).",
+                    "red",
+                )
+            )
+            return False
+        with open(f".dsed/index/top-level-messages/{node['id']}.json", "r", encoding="utf-8") as f:
+            message_ids = json.load(f)
 
 
     return True
 
 @outlook.command("index")
-def outlook_index():
+@click.option("--resume", is_flag=False, help="Continue indexing from where we left off.")
+def outlook_index(resume=False):
     try:
-        if os.path.isdir(".dsed/index"):
-            shutil.rmtree(".dsed/index")
-        os.makedirs(".dsed/index", exist_ok=True)
-        resp_folders = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
-        if resp_folders is None:
-            return -1
+        
+        if not resume:
+            if os.path.isdir(".dsed/index"):
+                shutil.rmtree(".dsed/index")
+            os.makedirs(".dsed/index", exist_ok=True)
+            resp_folders = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
+            if resp_folders is None:
+                return -1
 
-        with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
-            f.write(json.dumps(resp_folders.data, indent=2))
-            print(colored("Folder information saved to.dsed/index/folders.json", "green"))
+            with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
+                f.write(json.dumps(resp_folders.data, indent=2))
+                print(colored("Folder information saved to.dsed/index/folders.json", "green"))
+    
+            if os.path.isdir(".dsed/index/top-level-messages"):
+                shutil.rmtree(".dsed/index/top-level-messages")
+        else:
+            if not os.path.isfile(".dsed/index/folders.json"):
+                print(colored("No folders found to resume indexing from.", "red"))
+                return -1
+            with open(".dsed/index/folders.json", "r", encoding="utf-8") as f:
+                folder_data = json.load(f)
+        
+        os.makedirs(".dsed/index/top-level-messages", exist_ok=True)
+
+
         folder_data = resp_folders.data
         folders = []
 
@@ -216,7 +247,7 @@ def outlook_index():
         for i, (folder_name, node) in enumerate(folders):
             print(f"Indexing Folder {i+1}/{len(folders)}: {folder_name}")
 
-            if not index_folder(node):
+            if not index_folder(node, resume):
                 print(colored(f"Failed to index {folder_name}", "red"))
                 return -1
     except KeyboardInterrupt:

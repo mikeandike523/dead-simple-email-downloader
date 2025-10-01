@@ -3,6 +3,7 @@ import { withAuth } from "@/server/withAuth";
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import safeFilename from "@/utils/safeFilename";
 
 /** ──────────────────────────────────────────────────────────────
  * Types (response shape)
@@ -12,6 +13,7 @@ import { callGraphJSON } from "@/server/msgraph";
 export interface ApiFolderNode {
   id: string;
   name: string;
+  safeFilename: string;
   hidden: boolean;
   parentId?: string;          // parentFolderId from Graph
   children: ApiFolderNode[];  // recursion
@@ -106,6 +108,7 @@ function buildFolderForest(flat: GraphMailFolder[]): ApiFolderForest {
       hidden: !!f.isHidden,
       parentId: f.parentFolderId,
       children: [],
+      safeFilename: safeFilename(f.displayName),
     });
   }
 
