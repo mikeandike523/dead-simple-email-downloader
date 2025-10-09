@@ -127,17 +127,12 @@ def outlook_me():
 
 @outlook.command("folders")
 def outlook_folders():
-    resp = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
+    resp = call_route("/outlook/indexing/get-folders", "Fetching folder info...", save_debug_to=".dsed/debug/folders.json")
     if resp is None:
         return -1
-    with open(".dsed/debug/folders.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(resp.data, indent=2))
-        print(colored("Folder information saved to .dsed/debug/folders.json", "green"))
 
-
-def index_folder(node, resume):
-    #  First, we call with no link, to get the starting point
-    if not resume:
+def index_folder_get_top_level_ids(node):
+    if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
         resp = call_route(
             "/outlook/indexing/get-id-list",
             "Fetching folder info...",
@@ -185,51 +180,47 @@ def index_folder(node, resume):
         with open(f".dsed/index/top-level-messages/{node['id']}.json", "w", encoding="utf-8") as f:
             f.write(json.dumps(message_ids))
             print(colored(f"Indexed messages in folder {node['name']} ({node['id']}).", "green"))
-    else:
-        if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
-            print(
-                colored(
-                    f"No messages found in folder {node['name']} ({node['id']}).",
-                    "red",
-                )
-            )
-            return False
         with open(f".dsed/index/top-level-messages/{node['id']}.json", "r", encoding="utf-8") as f:
             message_ids = json.load(f)
 
 
     return True
 
+def index_folder_sanity_check(node):
+
+    top_level_messages_path = f".dsed/index/top-level-messages/{node['id']}.json"
+    if not os.path.isfile(top_level_messages_path):
+        print(colored(f"No top-level messages found in folder {node['name']} ({node['id']}). Fatal error.", "red"))
+        print(colored("Check that previous steps ran correctly.", "red"))
+        return False
+
 @outlook.command("index")
-@click.option("--resume", is_flag=False, help="Continue indexing from where we left off.")
-def outlook_index(resume=False):
+@click.option("--reset", is_flag=True, default=False, help="Reset the index.")
+def outlook_index(reset=False):
+    if reset:
+        if os.path.isdir(".dsed/index"):
+            shutil.rmtree(".dsed/index")
+        os.makedirs(".dsed/index", exist_ok=True)
+        print(colored("Index reset. Deleted all index files.", "green"))
+        return 0
     try:
-        
-        if not resume:
-            if os.path.isdir(".dsed/index"):
-                shutil.rmtree(".dsed/index")
-            os.makedirs(".dsed/index", exist_ok=True)
+
+    
+        if not os.path.isfile(".dsed/index/folders.json"):
             resp_folders = call_route("/outlook/indexing/get-folders", "Fetching folder info...")
             if resp_folders is None:
                 return -1
+            folder_data = resp_folders.data
 
             with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
                 f.write(json.dumps(resp_folders.data, indent=2))
                 print(colored("Folder information saved to.dsed/index/folders.json", "green"))
+
+        with open(".dsed/index/folders.json", "r", encoding="utf-8") as f:
+            folder_data = json.load(f)
     
-            if os.path.isdir(".dsed/index/top-level-messages"):
-                shutil.rmtree(".dsed/index/top-level-messages")
-        else:
-            if not os.path.isfile(".dsed/index/folders.json"):
-                print(colored("No folders found to resume indexing from.", "red"))
-                return -1
-            with open(".dsed/index/folders.json", "r", encoding="utf-8") as f:
-                folder_data = json.load(f)
-        
         os.makedirs(".dsed/index/top-level-messages", exist_ok=True)
 
-
-        folder_data = resp_folders.data
         folders = []
 
         def recursion(node, prior):
@@ -245,14 +236,30 @@ def outlook_index(resume=False):
             print("\t" + folder_name)
 
         for i, (folder_name, node) in enumerate(folders):
-            print(f"Indexing Folder {i+1}/{len(folders)}: {folder_name}")
+            print(f"Getting Top Level IDs for Folder {i+1}/{len(folders)}: {folder_name}")
 
-            if not index_folder(node, resume):
-                print(colored(f"Failed to index {folder_name}", "red"))
+            if not index_folder_get_top_level_ids(node):
+                print(colored(f"Failed to get top level IDs for {folder_name}", "red"))
                 return -1
+            
+        print(colored("All folders top-level-indexed successfully.", "green"))
+        
+        print("Performing sanity checks...")
+
+        
+        for i, (folder_name, node) in enumerate(folders):
+            print(f"Sanity Check for Folder {i+1}/{len(folders)}: {folder_name}")
+
+            if not index_folder_sanity_check(node):
+                print(colored(f"Sanity check failed for {folder_name}", "red"))
+                return -1
+            
+        return 0
+
     except KeyboardInterrupt:
         print("Process aborted by user.")
         return -1
+    
 
 if __name__ == "__main__":
     cli()

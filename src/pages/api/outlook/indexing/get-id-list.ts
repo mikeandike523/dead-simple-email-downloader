@@ -56,7 +56,7 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     });
   } catch (err: any) {
     return res.status(502).json({
-      error: "Failed to enumerate folders",
+      error: "Failed to get message id list.",
       detail: String(err?.message || err),
     });
   }
