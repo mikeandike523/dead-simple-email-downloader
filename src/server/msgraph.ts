@@ -282,7 +282,9 @@ export function buildGraphQueryString(params?: UrlParams): string {
 const DEFAULT_MAX_ATTEMPTS = 5;
 const BASE_DELAY_MS = 300;
 const MAX_BACKOFF_MS = 8_000;
-const JITTER_RATIO = 0.2; // +/-20%
+const JITTER_RATIO = 0.2;           // for non-explicit backoff (+/-20%)
+const EXPLICIT_JITTER_MAX_MS = 250; // cap small additive jitter on explicit waits
+const EXPLICIT_JITTER_RATIO = 0.1;  // up to +10% of explicit
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -315,10 +317,16 @@ function isRetriableStatus(status: number): boolean {
 }
 
 function computeBackoffMs(attempt: number, explicitMs: number | null): number {
-  if (explicitMs !== null) return explicitMs;
+  if (explicitMs !== null) {
+    const base = Math.max(0, explicitMs);
+    // positive-only jitter so we never violate the server’s minimum window
+    const additiveJitter = Math.min(EXPLICIT_JITTER_MAX_MS, base * EXPLICIT_JITTER_RATIO);
+    const jitter = additiveJitter > 0 ? Math.random() * additiveJitter : 0;
+    return Math.min(MAX_BACKOFF_MS, Math.floor(base + jitter));
+  }
 
+  // No explicit Retry-After header: exponential backoff with jitter (+/-)
   const exp = Math.min(MAX_BACKOFF_MS, BASE_DELAY_MS * 2 ** (attempt - 1));
-  // apply jitter +/-20%
   const jitter = exp * JITTER_RATIO;
   const min = Math.max(0, exp - jitter);
   const max = exp + jitter;
