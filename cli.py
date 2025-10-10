@@ -12,6 +12,8 @@ from termcolor import colored
 from pysrc.utils.summarize_response import summarize_response
 from pysrc.call_route import call_route
 
+INDEX_SANITY_CHECK_MAX_DISCREPANCY = 100
+
 
 @click.group()
 def cli():
@@ -220,9 +222,11 @@ def index_folder_sanity_check(node):
     )
     if folder_metadata is None:
         return False
-    if not isinstance(folder_metadata.data, dict) or not isinstance(
-        folder_metadata.data["counts"], dict
-    ) or not isinstance(folder_metadata.data["counts"]["totalItemCount"], int):
+    if (
+        not isinstance(folder_metadata.data, dict)
+        or not isinstance(folder_metadata.data["counts"], dict)
+        or not isinstance(folder_metadata.data["counts"]["totalItemCount"], int)
+    ):
         print(
             colored(
                 "Got successful HTTP status but invalid response data.",
@@ -235,11 +239,34 @@ def index_folder_sanity_check(node):
     indexedItemCount = len(message_ids)
     print(f"Indexed: {indexedItemCount}\tTotal: {totalItemCount}")
     if indexedItemCount < totalItemCount:
-        print(f"{totalItemCount - indexedItemCount} messages may have arrived or been moved in since indexing started.")
+        print(
+            f"{totalItemCount - indexedItemCount} messages may have arrived or been moved in since indexing started."
+        )
     if indexedItemCount > totalItemCount:
-        print(f"{indexedItemCount - totalItemCount} messages may have been deleted or moved since indexing started.")
-
+        print(
+            f"{indexedItemCount - totalItemCount} messages may have been deleted or moved since indexing started."
+        )
+    if abs(indexedItemCount - totalItemCount) > INDEX_SANITY_CHECK_MAX_DISCREPANCY:
+        print(
+            colored(
+                f"Error: Index discrepancy of at least {INDEX_SANITY_CHECK_MAX_DISCREPANCY} detected! This could indicate that emails have arrived or been moved in since indexing started.",
+                "red",
+            )
+        )
+        return False
+    print("Checking id uniqueness...")
+    message_ids_set = set(message_ids)
+    if len(message_ids) != len(message_ids_set):
+        print(
+            colored(
+                f"Error: Duplicated message IDs detected! This could indicate that emails have arrived or been moved in since indexing started.",
+                "red",
+            )
+        )
+        return False
+    print("No duplicate message ids.")
     return True
+
 
 @outlook.command("index")
 @click.option("--reset", is_flag=True, default=False, help="Reset the index.")

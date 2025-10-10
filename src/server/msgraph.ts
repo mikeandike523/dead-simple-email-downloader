@@ -341,6 +341,7 @@ export async function callGraphJSON<
   baseUrl = "https://graph.microsoft.com",
   timeoutMs,
   silent = false,
+  additionalHeaders = {},
 }: {
   minMinutesRemaining?: number;
   openidSub: string;
@@ -352,6 +353,7 @@ export async function callGraphJSON<
   baseUrl?: string;
   timeoutMs?: number;
   silent?: boolean;
+  additionalHeaders?: Record<string, string>;
 }) {
   const now =
     typeof performance !== "undefined" && typeof performance.now === "function"
@@ -397,9 +399,14 @@ export async function callGraphJSON<
     Accept: "application/json",
   };
 
+
+
   const initBase: RequestInit = {
     method,
-    headers: baseHeaders,
+    headers: {
+      ...baseHeaders,
+     ...additionalHeaders,
+    },
   };
 
   if (body !== undefined && method !== "GET" && method !== "DELETE") {

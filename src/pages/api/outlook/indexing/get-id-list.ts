@@ -8,6 +8,8 @@ type RouteBody = {
   nextLink?: string | null;
 };
 
+const PAGE_SIZE=100;
+
 const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
   try {
     const openidSub = req.user.sub;
@@ -20,7 +22,7 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
 
     const route = previousNextLink
       ? previousNextLink
-      : `/me/mailFolders/${folderId}/messages/delta?$top=100&$select=id`;
+      : `/me/mailFolders/${folderId}/messages/delta`;
 
     const graphResult = await callGraphJSON<{
       value: Array<{ id: string }>;
@@ -28,6 +30,12 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       "@odata.nextLink"?: string | null;
     }>({
       route,
+      urlParams: previousNextLink?undefined:{
+        "$select":"id",
+      },
+      additionalHeaders:{
+        "Prefer":`odata.maxpagesize=${PAGE_SIZE}`
+      },
       method: "GET",
       openidSub,
     });
