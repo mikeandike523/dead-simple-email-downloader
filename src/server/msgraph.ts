@@ -1,14 +1,13 @@
-import { dbExec, dbQuery, withTransaction } from "./db";
+import { fetchWithTimeout } from "@/utils/fetchWithTimeout";
+import summarizeResponse, {
+  JsonValue
+} from "@/utils/summarizeResponse";
+import { PoolConnection } from "mysql2/promise";
 import {
   dateToSqlUtcTimestamp,
   sqlUtcTimestampToDate,
 } from "../utils/time-and-date";
-import summarizeResponse, {
-  JsonValue,
-  ResponseSummary,
-} from "@/utils/summarizeResponse";
-import { fetchWithTimeout } from "@/utils/fetchWithTimeout";
-import { PoolConnection } from "mysql2/promise";
+import { dbExec, dbQuery, withTransaction } from "./db";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 type Primitive = string | number | boolean | null | undefined;
@@ -416,7 +415,6 @@ export async function callGraphJSON<
 
   // --- fetch + retry (429/503 with Retry-After) -----------------------------
   let attempt = 0;
-  let lastError: unknown = undefined;
 
   for (;;) {
     attempt++;
@@ -458,7 +456,6 @@ export async function callGraphJSON<
       // On final attempt (or success), summarize and return
       return await summarizeResponse<T>(res);
     } catch (err) {
-      lastError = err;
       const fetchMs = now() - tFetchStart;
 
       // Retry on transient network failures up to attempts limit
