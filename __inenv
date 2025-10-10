@@ -1,7 +1,7 @@
 #!/bin/bash
 
-dn="$(dirname "$(realpath "${BAS_SOURCE[0]}")")"
+dn="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 source "$dn/.venv/Scripts/activate"
 export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$dn"
-python "$@"
+"$@"
 deactivate
