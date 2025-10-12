@@ -94,6 +94,7 @@ def impl_outlook_login():
                         )
                     )
                     return -1
+        return 0
     except KeyboardInterrupt:
         print("")
         print("Login cancelled by user.")
