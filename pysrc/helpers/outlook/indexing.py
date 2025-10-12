@@ -63,11 +63,6 @@ def index_folder_get_top_level_ids(node):
                     "green",
                 )
             )
-        with open(
-            f".dsed/index/top-level-messages/{node['id']}.json", "r", encoding="utf-8"
-        ) as f:
-            message_ids = json.load(f)
-
     return True
 
 
@@ -134,4 +129,17 @@ def index_folder_sanity_check(node):
         )
         return False
     print("No duplicate message ids.")
+    return True
+
+def index_folder_get_top_level_metadata(folder_name,node):
+    if not os.path.isfile(f".dsed/index/top-level-message-metadata/{node['id']}.json"):
+        if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
+            print(colored(f"""\
+Top level message ID list missing for folder "{folder_name}", a previous step may have failed. Try resetting the index and running indexing again.
+                          ""","red"))
+            return False
+        with open(f".dsed/index/top-level-messages/{node['id']}.json", "r", encoding="utf-8") as f:
+            message_ids = json.load(f)
+
+        
     return True

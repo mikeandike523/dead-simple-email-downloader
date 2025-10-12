@@ -5,7 +5,7 @@ import json
 from termcolor import colored
 
 from pysrc.call_route import call_route
-from pysrc.helpers.outlook.indexing import index_folder_get_top_level_ids, index_folder_sanity_check
+from pysrc.helpers.outlook.indexing import index_folder_get_top_level_ids, index_folder_sanity_check, index_folder_get_top_level_metadata
 
 def impl_outlook_index(reset=False):
     if reset:
@@ -51,6 +51,8 @@ def impl_outlook_index(reset=False):
         for folder_name, _ in folders:
             print("\t" + folder_name)
 
+        print("Getting top level message IDs...")
+
         for i, (folder_name, node) in enumerate(folders):
             print(
                 f"Getting Top Level IDs for Folder {i+1}/{len(folders)}: {folder_name}"
@@ -69,6 +71,19 @@ def impl_outlook_index(reset=False):
 
             if not index_folder_sanity_check(node):
                 print(colored(f"Sanity check failed for {folder_name}", "red"))
+                return -1
+            
+        print("Fetching top-level message metadata...")
+
+        os.makedirs(".dsed/index/top-level-message-metadata", exist_ok=True)
+
+        for i, (folder_name, node) in enumerate(folders):
+            print(
+                f"Fetching Top Level Metadata for Folder {i+1}/{len(folders)}: {folder_name}"
+            )
+
+            if not index_folder_get_top_level_metadata(node):
+                print(colored(f"Failed to fetch top level metadata for {folder_name}", "red"))
                 return -1
 
         return 0
