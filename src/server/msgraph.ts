@@ -1,7 +1,5 @@
 import { fetchWithTimeout } from "@/utils/fetchWithTimeout";
-import summarizeResponse, {
-  JsonValue
-} from "@/utils/summarizeResponse";
+import summarizeResponse, { JsonValue } from "@/utils/summarizeResponse";
 import { PoolConnection } from "mysql2/promise";
 import {
   dateToSqlUtcTimestamp,
@@ -282,9 +280,9 @@ export function buildGraphQueryString(params?: UrlParams): string {
 const DEFAULT_MAX_ATTEMPTS = 5;
 const BASE_DELAY_MS = 300;
 const MAX_BACKOFF_MS = 8_000;
-const JITTER_RATIO = 0.2;           // for non-explicit backoff (+/-20%)
+const JITTER_RATIO = 0.2; // for non-explicit backoff (+/-20%)
 const EXPLICIT_JITTER_MAX_MS = 250; // cap small additive jitter on explicit waits
-const EXPLICIT_JITTER_RATIO = 0.1;  // up to +10% of explicit
+const EXPLICIT_JITTER_RATIO = 0.1; // up to +10% of explicit
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -320,7 +318,10 @@ function computeBackoffMs(attempt: number, explicitMs: number | null): number {
   if (explicitMs !== null) {
     const base = Math.max(0, explicitMs);
     // positive-only jitter so we never violate the server’s minimum window
-    const additiveJitter = Math.min(EXPLICIT_JITTER_MAX_MS, base * EXPLICIT_JITTER_RATIO);
+    const additiveJitter = Math.min(
+      EXPLICIT_JITTER_MAX_MS,
+      base * EXPLICIT_JITTER_RATIO
+    );
     const jitter = additiveJitter > 0 ? Math.random() * additiveJitter : 0;
     return Math.min(MAX_BACKOFF_MS, Math.floor(base + jitter));
   }
@@ -378,7 +379,6 @@ export async function callGraphJSON<
     url = route;
   }
 
-
   // --- ensureAccessToken timing ---
   const tEnsureStart = now();
   try {
@@ -400,24 +400,24 @@ export async function callGraphJSON<
 
   const token = await getCurrentAccessToken(openidSub);
 
-
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
   };
 
-
+  if (body !== undefined && method !== "GET" && method !== "DELETE") {
+    baseHeaders["Content-Type"] = "application/json";
+  }
 
   const initBase: RequestInit = {
     method,
     headers: {
       ...baseHeaders,
-     ...additionalHeaders,
+      ...additionalHeaders,
     },
   };
 
   if (body !== undefined && method !== "GET" && method !== "DELETE") {
-    baseHeaders["Content-Type"] = "application/json";
     (initBase as any).body = JSON.stringify(body);
   }
 

@@ -82,7 +82,7 @@ def impl_outlook_index(reset=False):
                 f"Fetching Top Level Metadata for Folder {i+1}/{len(folders)}: {folder_name}"
             )
 
-            if not index_folder_get_top_level_metadata(node):
+            if not index_folder_get_top_level_metadata(folder_name,node):
                 print(colored(f"Failed to fetch top level metadata for {folder_name}", "red"))
                 return -1
 

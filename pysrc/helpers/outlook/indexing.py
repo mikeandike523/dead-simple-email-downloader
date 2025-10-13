@@ -6,6 +6,7 @@ from termcolor import colored
 from pysrc.call_route import call_route
 
 INDEX_SANITY_CHECK_MAX_DISCREPANCY = 100
+INDEX_GET_METADATA_CHUNK_SIZE = 20
 
 def index_folder_get_top_level_ids(node):
     if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
@@ -140,6 +141,34 @@ Top level message ID list missing for folder "{folder_name}", a previous step ma
             return False
         with open(f".dsed/index/top-level-messages/{node['id']}.json", "r", encoding="utf-8") as f:
             message_ids = json.load(f)
+        message_ids_chunked = []
+
+        for i in range(0, len(message_ids), INDEX_GET_METADATA_CHUNK_SIZE):
+            message_ids_chunked.append(message_ids[i:i + INDEX_GET_METADATA_CHUNK_SIZE])
+
+        all_message_metadata = {}
+
+        for chunk_index, chunk_ids in enumerate(message_ids_chunked):
+            print(f"Fetching metadata for chunk {chunk_index+1}/{len(message_ids_chunked)}...")
+
+            metadata_response = call_route("/outlook/indexing/hydrate-message-metadata", "Fetching metadata for messages...", method="POST", json_body={
+                "ids": chunk_ids,
+                "includeHeaders": False,
+                "includeEpoch": True,
+            })
+
+            if metadata_response is None:
+                return False
+            
+            if not isinstance(metadata_response.data, dict) or not isinstance(metadata_response.data["messages"], list):
+                print(colored("Got successful HTTP status but invalid response data.", "red"))
+                return False
+            
+            for message_id, message_metadata in zip(chunk_ids, metadata_response.data["messages"]):
+                all_message_metadata[message_id] = message_metadata
+            
+        with open(f".dsed/index/top-level-message-metadata/{node['id']}.json", "w", encoding="utf-8") as f:
+            f.write(json.dumps(all_message_metadata))
 
         
     return True
