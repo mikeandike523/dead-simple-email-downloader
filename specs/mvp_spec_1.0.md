@@ -54,11 +54,10 @@ For each folder:
     <message_id>/
       message.json
       files_map.json
-      body/
-        body.html | body.txt
-        uniqueBody.html | uniqueBody.txt
-        body_noParse.html          (only if rewritten)
-        uniqueBody_noParse.html    (only if rewritten)
+      body.html | body.txt
+      uniqueBody.html | uniqueBody.txt
+      body_noParse.html          (only if rewritten)
+      uniqueBody_noParse.html    (only if rewritten)
       attachments/
         files/
         links/
@@ -135,7 +134,7 @@ For each conversation in the index:
 For each message ID:
 
 - Create message directory
-- Create standard subfolders (`body/`, `attachments/`, `inline/`)
+- Create standard subfolders (`attachments/`, `inline/`)
 - Initialize empty `files_map.json`
 
 ---
@@ -155,7 +154,9 @@ Recommended fields include:
 - `sentDateTime`, `receivedDateTime`
 - `internetMessageId` (if available)
 - `hasAttachments`
-- `body` and `uniqueBody` (contentType + content)
+- `body` and `uniqueBody` contentType only (no content payload)
+
+Do not store `body.content` or `uniqueBody.content` in `message.json`; the body data lives in `body.html` / `body.txt` files.
 
 ### 6.2 Canonical content rule
 
@@ -169,14 +170,14 @@ Recommended fields include:
 ### 7.1 Primary body
 
 - Use the server-default representation (no `Prefer` header).
-- If `contentType == "html"` → `body/body.html`
-- If `contentType == "text"` → `body/body.txt`
+- If `contentType == "html"` → `body.html`
+- If `contentType == "text"` → `body.txt`
 - If missing → record null in JSON and omit the file (or create empty; be consistent).
 
 ### 7.2 Unique body
 
 - Export `uniqueBody` in the same representation:
-  - `body/uniqueBody.html` or `body/uniqueBody.txt`
+  - `uniqueBody.html` or `uniqueBody.txt`
 
 ### 7.3 Optional text alternative (future feature)
 
@@ -184,7 +185,7 @@ Recommended fields include:
   ```
   Prefer: outlook.body-content-type="text"
   ```
-- Saved as a distinct file (e.g. `body/body_alt.txt`).
+- Saved as a distinct file (e.g. `body_alt.txt`).
 - Must be labeled in metadata as derived or server-generated.
 
 ---
@@ -318,4 +319,3 @@ Increment the progress bar by 1 for each top-level message after the message’s
 > **Messages are independent documents.** **Conversations are organizational overlays.** **Filenames are UI; mappings are truth.**
 
 This specification favors correctness, debuggability, and long-term stability over protocol completeness or storage minimization.
-

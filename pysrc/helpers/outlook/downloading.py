@@ -181,7 +181,7 @@ def _get_item_value(item_type: str, item_id: str) -> Optional[Tuple[bytes, str]]
 
 def _export_body_files(
     body_obj: Optional[Dict[str, Any]],
-    body_dir: str,
+    message_dir: str,
     basename: str,
     inline_maps: Optional[Tuple[Dict[str, str], Dict[str, str]]] = None,
 ) -> None:
@@ -194,18 +194,29 @@ def _export_body_files(
         return
 
     ext = "html" if content_type == "html" else "txt"
-    target_path = os.path.join(body_dir, f"{basename}.{ext}")
+    target_path = os.path.join(message_dir, f"{basename}.{ext}")
     original_content = content
 
     if inline_maps and content_type == "html":
         cid_map, location_map = inline_maps
         rewritten, changed = _rewrite_inline_html(content, cid_map, location_map)
         if changed:
-            no_parse_path = os.path.join(body_dir, f"{basename}_noParse.html")
+            no_parse_path = os.path.join(message_dir, f"{basename}_noParse.html")
             _write_text(no_parse_path, original_content)
             content = rewritten
 
     _write_text(target_path, content)
+
+
+def _message_for_json(message: Dict[str, Any]) -> Dict[str, Any]:
+    message_json = dict(message)
+    for key in ("body", "uniqueBody"):
+        body_obj = message.get(key)
+        if isinstance(body_obj, dict) and "contentType" in body_obj:
+            message_json[key] = {"contentType": body_obj.get("contentType")}
+        else:
+            message_json[key] = None
+    return message_json
 
 
 def _export_event_item(item: Dict[str, Any], base_dir: str) -> None:
@@ -235,20 +246,18 @@ def _export_message_from_data(
     allow_graph_attachments: bool,
 ) -> None:
     _ensure_dir(message_dir)
-    body_dir = os.path.join(message_dir, "body")
     attachments_dir = os.path.join(message_dir, "attachments")
     attachments_files_dir = os.path.join(attachments_dir, "files")
     attachments_links_dir = os.path.join(attachments_dir, "links")
     attachments_items_dir = os.path.join(attachments_dir, "items")
     inline_dir = os.path.join(message_dir, "inline")
 
-    _ensure_dir(body_dir)
     _ensure_dir(attachments_files_dir)
     _ensure_dir(attachments_links_dir)
     _ensure_dir(attachments_items_dir)
     _ensure_dir(inline_dir)
 
-    _write_json(os.path.join(message_dir, "message.json"), message)
+    _write_json(os.path.join(message_dir, "message.json"), _message_for_json(message))
 
     inline_cid_map: Dict[str, str] = {}
     inline_location_map: Dict[str, str] = {}
@@ -402,8 +411,8 @@ def _export_message_from_data(
     _write_json(os.path.join(message_dir, "files_map.json"), files_map)
 
     inline_maps = (inline_cid_map, inline_location_map)
-    _export_body_files(message.get("body"), body_dir, "body", inline_maps)
-    _export_body_files(message.get("uniqueBody"), body_dir, "uniqueBody", inline_maps)
+    _export_body_files(message.get("body"), message_dir, "body", inline_maps)
+    _export_body_files(message.get("uniqueBody"), message_dir, "uniqueBody", inline_maps)
 
 
 def _export_message_by_id(message_id: str, message_dir: str) -> bool:
