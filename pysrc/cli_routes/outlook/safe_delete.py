@@ -41,10 +41,30 @@ def _wrap_with_prefix(prefix, text, width):
 def impl_outlook_safe_delete(
     exact_sender,
     exact_subject,
+    subject_is_regex=False,
+    prompt=False,
     case_sensitive=False,
     preview_count=25,
+    show_all=False,
+    report=False,
+    assume_yes=False,
     soft=False,
 ):
+    if prompt:
+        if not exact_sender:
+            exact_sender = click.prompt("Exact sender email")
+        if not exact_subject:
+            label = "Subject regex" if subject_is_regex else "Exact subject"
+            exact_subject = click.prompt(label)
+    if not exact_sender or not exact_subject:
+        print(
+            colored(
+                "exact-sender and exact-subject are required (or use --prompt).",
+                "red",
+            )
+        )
+        return -1
+
     if preview_count < 1:
         print(colored("preview-count must be at least 1.", "red"))
         return -1
@@ -56,6 +76,7 @@ def impl_outlook_safe_delete(
             "exactSender": exact_sender,
             "exactSubject": exact_subject,
             "caseSensitive": case_sensitive,
+            "subjectIsRegex": subject_is_regex,
         },
     )
     if resp is None:
@@ -76,7 +97,10 @@ def impl_outlook_safe_delete(
         print(colored("No matching messages found.", "yellow"))
         return 0
 
-    preview_count = min(preview_count, total)
+    if show_all:
+        preview_count = total
+    else:
+        preview_count = min(preview_count, total)
     print(colored(f"Found {total} matching messages.", "green"))
     print(colored(f"Showing first {preview_count} preview(s):", "cyan"))
 
@@ -100,14 +124,18 @@ def impl_outlook_safe_delete(
     if remaining > 0:
         print(colored(f"... and {remaining} more", "yellow"))
 
-    action_label = "Move" if soft else "Delete"
-    confirm = click.confirm(
-        f"{action_label} {total} message(s) with safe-delete now?",
-        default=False,
-    )
-    if not confirm:
-        print(colored("Aborted.", "yellow"))
+    if report:
         return 0
+
+    action_label = "Move" if soft else "Delete"
+    if not assume_yes:
+        confirm = click.confirm(
+            f"{action_label} {total} message(s) with safe-delete now?",
+            default=False,
+        )
+        if not confirm:
+            print(colored("Aborted.", "yellow"))
+            return 0
 
     delete_resp = call_route(
         "/outlook/safe-delete/delete",

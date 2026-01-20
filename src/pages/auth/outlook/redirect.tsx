@@ -1,6 +1,6 @@
 import { GetServerSideProps } from "next";
 import React, { useEffect } from "react";
-import { dbExec } from "@/server/db";
+import { dbExec, dbQuery } from "@/server/db";
 import { decodeJwt } from "jose"; // lightweight decode; see note below re: full verification
 import { sign as signJwtHS } from "@/utils/jwt-sign"; // small helper you have/ create (HS256)
 import { verifyState } from "@/server/oidc-state"; // pair to signState
@@ -34,6 +34,27 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     const { n: nonce, pt: pollToken } = state ?? {};
     if (!nonce || !pollToken) {
       return { props: { ok: false, msg: "Invalid state payload" } };
+    }
+
+    const loginRows = await dbQuery(
+      "SELECT ok, openid_sub FROM pending_logins WHERE poll_token = ?",
+      [pollToken]
+    );
+    if (loginRows.length === 0) {
+      return { props: { ok: false, msg: "Unknown login request" } };
+    }
+    const loginRow = loginRows[0] as {
+      ok: number | boolean;
+      openid_sub: string | null;
+    };
+    if (loginRow.ok && loginRow.openid_sub) {
+      res.setHeader("Cache-Control", "no-store");
+      return {
+        props: {
+          ok: true,
+          msg: "Login already completed. You may close this window and return to your CLI.",
+        },
+      };
     }
 
     // 4) Exchange code for tokens

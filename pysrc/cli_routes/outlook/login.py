@@ -1,6 +1,7 @@
 import json
 from time import sleep
 import webbrowser
+import os
 
 import requests
 from termcolor import colored
@@ -83,6 +84,7 @@ def impl_outlook_login():
 
                 print(colored("\nLogin successful!", "green"))
 
+                os.makedirs(".dsed", exist_ok=True)
                 with open(".dsed/jwt.json", "w", encoding="utf-8") as f:
                     f.write(json.dumps(resp.data))
                     print(colored("JWT saved to .dsed/jwt.json", "green"))

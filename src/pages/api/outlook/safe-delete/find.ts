@@ -8,6 +8,7 @@ type RouteBody = {
   exactSender: string;
   exactSubject: string;
   caseSensitive?: boolean;
+  subjectIsRegex?: boolean;
 };
 
 type GraphMessage = {
@@ -65,12 +66,25 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       exactSender,
       exactSubject,
       caseSensitive = false,
+      subjectIsRegex = false,
     } = req.body as RouteBody;
 
     if (!exactSender || !exactSubject) {
       return res.status(400).json({
         error: "exactSender and exactSubject are required",
       });
+    }
+
+    let subjectRegex: RegExp | null = null;
+    if (subjectIsRegex) {
+      try {
+        subjectRegex = new RegExp(exactSubject, caseSensitive ? "" : "i");
+      } catch (err: any) {
+        return res.status(400).json({
+          error: "Invalid subject regex",
+          detail: String(err?.message || err),
+        });
+      }
     }
 
     const senderCompare = caseSensitive
@@ -80,7 +94,9 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       ? exactSubject
       : exactSubject.toLowerCase();
 
-    const search = buildSearchQuery(exactSender, exactSubject);
+    const search = subjectIsRegex
+      ? `"from:${escapeSearchTerm(exactSender)}"`
+      : buildSearchQuery(exactSender, exactSubject);
 
     const matches: Array<{
       id: string;
@@ -140,9 +156,11 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
         const senderMatch = caseSensitive
           ? senderAddress === senderCompare
           : senderAddress.toLowerCase() === senderCompare;
-        const subjectMatch = caseSensitive
-          ? subject === subjectCompare
-          : subject.toLowerCase() === subjectCompare;
+        const subjectMatch = subjectRegex
+          ? subjectRegex.test(subject)
+          : caseSensitive
+            ? subject === subjectCompare
+            : subject.toLowerCase() === subjectCompare;
 
         if (!senderMatch || !subjectMatch) continue;
         if (!msg.id) continue;

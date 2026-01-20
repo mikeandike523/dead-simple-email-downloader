@@ -1,9 +1,10 @@
 import { withAuth } from "@/server/withAuth";
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
-import { callGraphJSON } from "@/server/msgraph";
+import { callGraphJSON, getCurrentAccessToken } from "@/server/msgraph";
 import { AuthUser } from "@/server/auth";
 import lodash from "lodash";
+import { decodeJwt } from "jose";
 
 /** ──────────────────────────────────────────────────────────────
  * Types
@@ -43,6 +44,17 @@ export interface MailIdentity {
 export interface GraphUserInfoExtended extends GraphUserInfo {
   mailIdentity: MailIdentity;
   mailboxSettings?: MailboxSettings;
+  graphAccessToken?: {
+    scopes: string[];
+    roles: string[];
+    aud?: string;
+    appid?: string;
+    tid?: string;
+    oid?: string;
+    iss?: string;
+    version?: string;
+    expiresAtUtc?: string;
+  };
 }
 
 /** Raw Graph response type (very loose) */
@@ -146,6 +158,31 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     route: "me/mailboxSettings",
   });
 
+  const accessToken = await getCurrentAccessToken(openidSub);
+  let graphAccessToken: GraphUserInfoExtended["graphAccessToken"] | undefined;
+  if (accessToken) {
+    try {
+      const claims = decodeJwt(accessToken) as Record<string, any>;
+      const scp = typeof claims.scp === "string" ? claims.scp : "";
+      const roles = Array.isArray(claims.roles) ? claims.roles : [];
+      const exp = typeof claims.exp === "number" ? claims.exp : null;
+      graphAccessToken = {
+        scopes: scp ? scp.split(" ").filter(Boolean) : [],
+        roles: roles.map(String),
+        aud: typeof claims.aud === "string" ? claims.aud : undefined,
+        appid: typeof claims.appid === "string" ? claims.appid : undefined,
+        tid: typeof claims.tid === "string" ? claims.tid : undefined,
+        oid: typeof claims.oid === "string" ? claims.oid : undefined,
+        iss: typeof claims.iss === "string" ? claims.iss : undefined,
+        version: typeof claims.ver === "string" ? claims.ver : undefined,
+        expiresAtUtc:
+          exp !== null ? new Date(exp * 1000).toISOString() : undefined,
+      };
+    } catch {
+      graphAccessToken = undefined;
+    }
+  }
+
   // Start with auth claims you already expose
   const result: Partial<AuthUser & GraphUserInfoExtended> = {
     ...lodash.pick(req.user, ["sub"]),
@@ -171,6 +208,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     (result as GraphUserInfoExtended).mailboxSettings = mapMailboxSettings(
       mbsResult.data as RawMailboxSettings
     );
+  }
+
+  if (graphAccessToken) {
+    (result as GraphUserInfoExtended).graphAccessToken = graphAccessToken;
   }
 
   return res.status(200).json(result);
