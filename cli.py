@@ -59,8 +59,9 @@ def outlook_index(reset=False):
 
 
 @outlook.command("download")
-def outlook_download():
-    return impl_outlook_download()
+@click.option("--reset", is_flag=True, default=False, help="Delete .dsed/caches before downloading.")
+def outlook_download(reset=False):
+    return impl_outlook_download(reset)
 
 @outlook.command("total-emails")
 def outlook_total_emails():

@@ -94,6 +94,8 @@ Indexing builds the local `.dsed/index` artifacts that the download step relies 
   - Downloads all messages based on `.dsed/index`.
   - Output goes to `.dsed/caches/<folder-id>/<conversation-id>/<message-id>/`.
   - If indexing has not been run, this command fails and tells you to run indexing first.
+- `python cli.py outlook download --reset`
+  - Deletes `.dsed/caches` and exits (no download).
 
 ### Safe delete
 

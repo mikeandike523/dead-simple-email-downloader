@@ -2,6 +2,7 @@ import base64
 import json
 import mimetypes
 import os
+import shutil
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -450,7 +451,13 @@ def _load_conversations(folder_id: str) -> Optional[List[Dict[str, Any]]]:
         return json.load(f)
 
 
-def download_all_folders() -> int:
+def download_all_folders(reset: bool = False) -> int:
+    if reset:
+        if os.path.isdir(".dsed/caches"):
+            shutil.rmtree(".dsed/caches")
+        os.makedirs(".dsed/caches")
+        return 0
+
     forest = _load_folder_forest()
     if forest is None:
         return -1
