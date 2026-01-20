@@ -11,6 +11,12 @@ from termcolor import colored
 from tqdm import tqdm
 
 from pysrc.call_route import BASE_URL, _load_jwt
+from pysrc.helpers.shortcodes import (
+    apply_folder_shortcodes,
+    build_shortcode_map,
+    collect_folder_nodes,
+    write_shortcode_map,
+)
 from pysrc.utils.summarize_response import summarize_response
 
 
@@ -273,8 +279,20 @@ def _export_message_from_data(
 
     _write_json(os.path.join(message_dir, "attachments.json"), attachments)
 
+    attachment_ids = [att.get("id") for att in attachments if att.get("id")]
+    (
+        attachment_id_to_shortcode,
+        attachment_shortcode_to_id,
+        attachment_shortcode_length,
+    ) = build_shortcode_map(attachment_ids)
+
     for att in attachments:
         attachment_id = att.get("id")
+        attachment_shortcode = (
+            attachment_id_to_shortcode.get(attachment_id) if attachment_id else None
+        )
+        if attachment_id and not attachment_shortcode:
+            raise ValueError(f"Missing shortcode for attachment id {attachment_id}")
         odata_type = att.get("@odata.type") or att.get("odataType")
         is_inline = bool(att.get("isInline"))
         original_name = att.get("name")
@@ -297,11 +315,12 @@ def _export_message_from_data(
         if attachment_type == "referenceAttachment":
             if attachment_id:
                 _write_json(
-                    os.path.join(attachments_links_dir, f"{attachment_id}.json"), att
+                    os.path.join(attachments_links_dir, f"{attachment_shortcode}.json"), att
                 )
             files_map.append(
                 {
                     "attachmentId": attachment_id,
+                    "attachmentShortcode": attachment_shortcode,
                     "attachmentType": attachment_type,
                     "isInline": is_inline,
                     "originalName": original_name,
@@ -318,7 +337,7 @@ def _export_message_from_data(
         if attachment_type == "fileAttachment":
             if not attachment_id:
                 continue
-            filename = f"{attachment_id}__{sanitized_name}"
+            filename = f"{attachment_shortcode}{sanitized_name}"
             if is_inline:
                 rel_path = f"inline/{filename}"
                 disk_path = os.path.join(inline_dir, filename)
@@ -347,6 +366,7 @@ def _export_message_from_data(
             files_map.append(
                 {
                     "attachmentId": attachment_id,
+                    "attachmentShortcode": attachment_shortcode,
                     "attachmentType": attachment_type,
                     "isInline": is_inline,
                     "originalName": original_name,
@@ -363,7 +383,7 @@ def _export_message_from_data(
         if attachment_type == "itemAttachment":
             if not attachment_id:
                 continue
-            item_dir = os.path.join(attachments_items_dir, attachment_id)
+            item_dir = os.path.join(attachments_items_dir, attachment_shortcode)
             _ensure_dir(item_dir)
             detail = None
             if message_id:
@@ -395,11 +415,12 @@ def _export_message_from_data(
             files_map.append(
                 {
                     "attachmentId": attachment_id,
+                    "attachmentShortcode": attachment_shortcode,
                     "attachmentType": attachment_type,
                     "isInline": is_inline,
                     "originalName": original_name,
                     "sanitizedName": sanitized_name,
-                    "relativePath": f"attachments/items/{attachment_id}",
+                    "relativePath": f"attachments/items/{attachment_shortcode}",
                     "contentType": content_type,
                     "size": size,
                     "contentId": content_id,
@@ -407,6 +428,14 @@ def _export_message_from_data(
                 }
             )
             continue
+
+    _write_json(
+        os.path.join(message_dir, "attachment_shortcodes.json"),
+        {
+            "shortcodeLength": attachment_shortcode_length,
+            "shortcodeToId": attachment_shortcode_to_id,
+        },
+    )
 
     _write_json(os.path.join(message_dir, "files_map.json"), files_map)
 
@@ -446,9 +475,22 @@ def _collect_folders_in_order(
     return folders
 
 
-def _load_conversations(folder_id: str) -> Optional[List[Dict[str, Any]]]:
-    path = f".dsed/index/conversations-organized/{folder_id}.json"
-    if not os.path.isfile(path):
+def _load_conversations(
+    folder_id: str, folder_shortcode: str
+) -> Optional[Tuple[Dict[str, Any], str]]:
+    new_path = f".dsed/index/conversations-organized/{folder_shortcode}.json"
+    old_path = f".dsed/index/conversations-organized/{folder_id}.json"
+    if not os.path.isfile(new_path) and os.path.isfile(old_path):
+        with open(old_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            data = {
+                "folderId": folder_id,
+                "folderShortcode": folder_shortcode,
+                "conversations": data,
+            }
+        _write_json(new_path, data)
+    if not os.path.isfile(new_path):
         print(
             colored(
                 f"Missing conversation index for folder {folder_id}. Run indexing first.",
@@ -456,8 +498,79 @@ def _load_conversations(folder_id: str) -> Optional[List[Dict[str, Any]]]:
             )
         )
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    with open(new_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, list):
+        data = {
+            "folderId": folder_id,
+            "folderShortcode": folder_shortcode,
+            "conversations": data,
+        }
+    return data, new_path
+
+
+def _ensure_conversation_shortcodes(
+    data: Dict[str, Any], index_path: str
+) -> List[Dict[str, Any]]:
+    conversations = data.get("conversations")
+    if not isinstance(conversations, list):
+        return []
+
+    conversation_ids = [c.get("conversationId") for c in conversations if c.get("conversationId")]
+    conv_id_to_shortcode, conv_shortcode_to_id, conv_length = build_shortcode_map(
+        conversation_ids
+    )
+
+    changed = False
+    for conversation in conversations:
+        conversation_id = conversation.get("conversationId")
+        if conversation_id:
+            shortcode = conv_id_to_shortcode.get(conversation_id)
+            if conversation.get("conversationShortcode") != shortcode:
+                conversation["conversationShortcode"] = shortcode
+                changed = True
+        messages = conversation.get("messages", [])
+        if not isinstance(messages, list):
+            continue
+        message_ids = [m.get("id") for m in messages if m.get("id")]
+        msg_id_to_shortcode, msg_shortcode_to_id, msg_length = build_shortcode_map(
+            message_ids
+        )
+        if conversation.get("messageShortcodes") != msg_shortcode_to_id:
+            conversation["messageShortcodes"] = msg_shortcode_to_id
+            conversation["messageShortcodeLength"] = msg_length
+            changed = True
+        for meta in messages:
+            message_id = meta.get("id")
+            if not message_id:
+                continue
+            shortcode = msg_id_to_shortcode.get(message_id)
+            if meta.get("shortcode") != shortcode:
+                meta["shortcode"] = shortcode
+                changed = True
+
+    if data.get("conversationShortcodes") != conv_shortcode_to_id:
+        data["conversationShortcodes"] = conv_shortcode_to_id
+        data["conversationShortcodeLength"] = conv_length
+        changed = True
+
+    if changed:
+        _write_json(index_path, data)
+
+    return conversations
+
+
+def _ensure_folder_shortcodes(folder_forest: List[Dict[str, Any]]) -> None:
+    nodes = collect_folder_nodes(folder_forest)
+    folder_ids = [node.get("id") for node in nodes if node.get("id")]
+    id_to_shortcode, shortcode_to_id, length = build_shortcode_map(folder_ids)
+    apply_folder_shortcodes(folder_forest, id_to_shortcode)
+    write_shortcode_map(
+        ".dsed/index/shortcodes/folders.json",
+        id_to_shortcode,
+        shortcode_to_id,
+        length,
+    )
 
 
 def download_all_folders(reset: bool = False) -> int:
@@ -471,6 +584,8 @@ def download_all_folders(reset: bool = False) -> int:
     if forest is None:
         return -1
 
+    _ensure_folder_shortcodes(forest)
+    _write_json(".dsed/index/folders.json", forest)
     folders = _collect_folders_in_order(forest)
     if not folders:
         print(colored("No folders found.", "red"))
@@ -480,11 +595,19 @@ def download_all_folders(reset: bool = False) -> int:
 
     for i, (folder_name, node) in enumerate(folders):
         folder_id = node["id"]
-        conversations = _load_conversations(folder_id)
-        if conversations is None:
+        folder_shortcode = node.get("shortcode")
+        if not folder_shortcode:
+            print(colored("Missing folder shortcode during download.", "red"))
             return -1
+        loaded = _load_conversations(folder_id, folder_shortcode)
+        if loaded is None:
+            return -1
+        conversations_data, conversations_path = loaded
+        conversations = _ensure_conversation_shortcodes(
+            conversations_data, conversations_path
+        )
 
-        folder_cache_dir = os.path.join(".dsed/caches", folder_id)
+        folder_cache_dir = os.path.join(".dsed/caches", folder_shortcode)
         _ensure_dir(folder_cache_dir)
 
         total_items = sum(len(c.get("messages", [])) for c in conversations)
@@ -492,18 +615,20 @@ def download_all_folders(reset: bool = False) -> int:
         with tqdm(total=total_items, desc=desc) as pbar:
             for conversation in conversations:
                 conversation_id = conversation.get("conversationId")
-                if not conversation_id:
+                conversation_shortcode = conversation.get("conversationShortcode")
+                if not conversation_id or not conversation_shortcode:
                     continue
-                conv_dir = os.path.join(folder_cache_dir, conversation_id)
+                conv_dir = os.path.join(folder_cache_dir, conversation_shortcode)
                 _ensure_dir(conv_dir)
 
                 for message_meta in conversation.get("messages", []):
                     message_id = message_meta.get("id")
-                    if not message_id:
+                    message_shortcode = message_meta.get("shortcode")
+                    if not message_id or not message_shortcode:
                         pbar.update(1)
                         continue
 
-                    msg_dir = os.path.join(conv_dir, message_id)
+                    msg_dir = os.path.join(conv_dir, message_shortcode)
                     _ensure_dir(msg_dir)
 
                     ok = _export_message_by_id(message_id, msg_dir)

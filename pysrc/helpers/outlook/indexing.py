@@ -6,9 +6,20 @@ import binascii
 from termcolor import colored
 
 from pysrc.call_route import call_route
+from pysrc.helpers.shortcodes import build_shortcode_map
 
 INDEX_SANITY_CHECK_MAX_DISCREPANCY = 100
 INDEX_GET_METADATA_CHUNK_SIZE = 20
+def _resolve_index_file(base_dir: str, folder_id: str, folder_shortcode: str) -> str:
+    os.makedirs(base_dir, exist_ok=True)
+    new_path = os.path.join(base_dir, f"{folder_shortcode}.json")
+    old_path = os.path.join(base_dir, f"{folder_id}.json")
+    if not os.path.isfile(new_path) and os.path.isfile(old_path):
+        with open(old_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        with open(new_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    return new_path
 
 def _decode_conversation_index(b64: str) -> bytes:
     """Decode Graph's Base64 conversationIndex to raw bytes; robust to missing padding."""
@@ -24,13 +35,21 @@ def _decode_conversation_index(b64: str) -> bytes:
 
 
 def index_folder_get_top_level_ids(node):
-    if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
+    folder_id = node.get("id")
+    folder_shortcode = node.get("shortcode")
+    if not folder_id or not folder_shortcode:
+        print(colored("Missing folder id or shortcode during indexing.", "red"))
+        return False
+    target_path = _resolve_index_file(
+        ".dsed/index/top-level-messages", folder_id, folder_shortcode
+    )
+    if not os.path.isfile(target_path):
         resp = call_route(
             "/outlook/indexing/get-id-list",
             "Fetching folder info...",
             method="POST",
             json_body={
-                "folderId": node["id"],
+                "folderId": folder_id,
             },
         )
         if resp is None:
@@ -70,12 +89,12 @@ def index_folder_get_top_level_ids(node):
             print(f"Discovered {len(message_ids)} so far...")
             next_link = resp.data.get("nextLink", None)
         with open(
-            f".dsed/index/top-level-messages/{node['id']}.json", "w", encoding="utf-8"
+            target_path, "w", encoding="utf-8"
         ) as f:
             f.write(json.dumps(message_ids))
             print(
                 colored(
-                    f"Indexed messages in folder {node['name']} ({node['id']}).",
+                    f"Indexed messages in folder {node['name']} ({folder_id}).",
                     "green",
                 )
             )
@@ -83,12 +102,18 @@ def index_folder_get_top_level_ids(node):
 
 
 def index_folder_sanity_check(node):
-
-    top_level_messages_path = f".dsed/index/top-level-messages/{node['id']}.json"
+    folder_id = node.get("id")
+    folder_shortcode = node.get("shortcode")
+    if not folder_id or not folder_shortcode:
+        print(colored("Missing folder id or shortcode during sanity check.", "red"))
+        return False
+    top_level_messages_path = _resolve_index_file(
+        ".dsed/index/top-level-messages", folder_id, folder_shortcode
+    )
     if not os.path.isfile(top_level_messages_path):
         print(
             colored(
-                f"No top-level messages found in folder {node['name']} ({node['id']}). Fatal error.",
+                f"No top-level messages found in folder {node['name']} ({folder_id}). Fatal error.",
                 "red",
             )
         )
@@ -98,7 +123,7 @@ def index_folder_sanity_check(node):
         "/outlook/indexing/get-folder-metadata",
         "Fetching folder metadata...",
         method="POST",
-        json_body={"folderId": node["id"]},
+        json_body={"folderId": folder_id},
     )
     if folder_metadata is None:
         return False
@@ -147,15 +172,26 @@ def index_folder_sanity_check(node):
     print("No duplicate message ids.")
     return True
 
-def index_folder_get_top_level_metadata(folder_name,node):
-    if not os.path.isfile(f".dsed/index/top-level-message-metadata/{node['id']}.json"):
-        if not os.path.isfile(f".dsed/index/top-level-messages/{node['id']}.json"):
+def index_folder_get_top_level_metadata(folder_name, node):
+    folder_id = node.get("id")
+    folder_shortcode = node.get("shortcode")
+    if not folder_id or not folder_shortcode:
+        print(colored("Missing folder id or shortcode for metadata.", "red"))
+        return False
+    metadata_path = _resolve_index_file(
+        ".dsed/index/top-level-message-metadata", folder_id, folder_shortcode
+    )
+    if not os.path.isfile(metadata_path):
+        messages_path = _resolve_index_file(
+            ".dsed/index/top-level-messages", folder_id, folder_shortcode
+        )
+        if not os.path.isfile(messages_path):
             print(colored(f"""\
 Top level message ID list missing for folder "{folder_name}", a previous step may have failed.
 Try resetting the index and running indexing again.
                           ""","red"))
             return False
-        with open(f".dsed/index/top-level-messages/{node['id']}.json", "r", encoding="utf-8") as f:
+        with open(messages_path, "r", encoding="utf-8") as f:
             message_ids = json.load(f)
         message_ids_chunked = []
 
@@ -183,7 +219,7 @@ Try resetting the index and running indexing again.
             for message_id, message_metadata in zip(chunk_ids, metadata_response.data["messages"]):
                 all_message_metadata[message_id] = message_metadata
             
-        with open(f".dsed/index/top-level-message-metadata/{node['id']}.json", "w", encoding="utf-8") as f:
+        with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(json.dumps(all_message_metadata))
 
         
@@ -192,7 +228,14 @@ Try resetting the index and running indexing again.
 
 def index_folder_organize_into_conversations(folder_name, node):
     # 1) Load top-level metadata produced by an earlier step
-    input_path = f".dsed/index/top-level-message-metadata/{node['id']}.json"
+    folder_id = node.get("id")
+    folder_shortcode = node.get("shortcode")
+    if not folder_id or not folder_shortcode:
+        print(colored("Missing folder id or shortcode for conversations.", "red"))
+        return False
+    input_path = _resolve_index_file(
+        ".dsed/index/top-level-message-metadata", folder_id, folder_shortcode
+    )
     if not os.path.isfile(input_path):
         print(colored(f"""\
 Top level message metadata list missing for folder "{folder_name}", a previous step may have failed.
@@ -206,7 +249,7 @@ Try resetting the index and running indexing again.
     # 5) Write out an organized artifact (non-destructive, separate from input)
     out_dir = ".dsed/index/conversations-organized"
     os.makedirs(out_dir, exist_ok=True)
-    output_path = os.path.join(out_dir, f"{node['id']}.json")
+    output_path = os.path.join(out_dir, f"{folder_shortcode}.json")
 
     if os.path.isfile(output_path):
         return True
@@ -245,20 +288,41 @@ Try resetting the index and running indexing again.
     # Create a list of (conversationId, [messages...]) sorted latest->oldest by group
     sorted_conversations = sorted(conversation_groups.items(), key=group_sort_key, reverse=True)
 
+    conversation_ids = [cid for cid, _ in sorted_conversations if cid]
+    conv_id_to_shortcode, conv_shortcode_to_id, conv_length = build_shortcode_map(
+        conversation_ids
+    )
 
+    result = []
+    for cid, metas in sorted_conversations:
+        message_ids = [m.get("id") for m in metas if m.get("id")]
+        msg_id_to_shortcode, msg_shortcode_to_id, msg_length = build_shortcode_map(
+            message_ids
+        )
+        for meta in metas:
+            message_id = meta.get("id")
+            if message_id:
+                meta["shortcode"] = msg_id_to_shortcode.get(message_id)
+        result.append(
+            {
+                "conversationId": cid,
+                "conversationShortcode": conv_id_to_shortcode.get(cid),
+                "messageShortcodes": msg_shortcode_to_id,
+                "messageShortcodeLength": msg_length,
+                "messages": metas,
+            }
+        )
 
-    # Normalize to a JSON-friendly shape with deterministic fields
-    # Keep the full message metadata entries in their new order.
-    result = [
-        {
-            "conversationId": cid,
-            "messages": metas  # already sorted latest->oldest
-        }
-        for cid, metas in sorted_conversations
-    ]
+    output_payload = {
+        "folderId": folder_id,
+        "folderShortcode": folder_shortcode,
+        "conversationShortcodes": conv_shortcode_to_id,
+        "conversationShortcodeLength": conv_length,
+        "conversations": result,
+    }
 
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+        json.dump(output_payload, f, ensure_ascii=False, indent=2)
 
     print(colored(f'Organized {len(result)} conversation group(s) for folder "{folder_name}" -> {output_path}', "green"))
     return True

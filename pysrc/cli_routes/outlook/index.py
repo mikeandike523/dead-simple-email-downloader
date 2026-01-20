@@ -29,17 +29,37 @@ def impl_outlook_index(reset=False):
             if resp_folders is None:
                 return -1
             folder_data = resp_folders.data
+            if folder_data is None:
+                folder_data = []
+        else:
+            with open(".dsed/index/folders.json", "r", encoding="utf-8") as f:
+                folder_data = json.load(f)
 
-            with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
-                f.write(json.dumps(resp_folders.data, indent=2))
-                print(
-                    colored(
-                        "Folder information saved to.dsed/index/folders.json", "green"
-                    )
+        from pysrc.helpers.shortcodes import (
+            apply_folder_shortcodes,
+            build_shortcode_map,
+            collect_folder_nodes,
+            write_shortcode_map,
+        )
+
+        nodes = collect_folder_nodes(folder_data)
+        folder_ids = [node.get("id") for node in nodes if node.get("id")]
+        id_to_shortcode, shortcode_to_id, length = build_shortcode_map(folder_ids)
+        apply_folder_shortcodes(folder_data, id_to_shortcode)
+        write_shortcode_map(
+            ".dsed/index/shortcodes/folders.json",
+            id_to_shortcode,
+            shortcode_to_id,
+            length,
+        )
+
+        with open(".dsed/index/folders.json", "w", encoding="utf-8") as f:
+            f.write(json.dumps(folder_data, indent=2))
+            print(
+                colored(
+                    "Folder information saved to.dsed/index/folders.json", "green"
                 )
-
-        with open(".dsed/index/folders.json", "r", encoding="utf-8") as f:
-            folder_data = json.load(f)
+            )
 
         os.makedirs(".dsed/index/top-level-messages", exist_ok=True)
 

@@ -14,26 +14,55 @@
 
 ---
 
-## 2. Input model (prebuilt index)
+## 2. Shortcodes (path-safe IDs)
+
+Long Graph IDs must never be used directly in filesystem paths. DSED therefore uses **shortcodes**:
+
+- **Definition:** `shortcode = "__" + sha256(id).hexdigest()[:N] + "__"` (hex only).
+- **Length growth:** start with 8 hex chars, then 12, 16, 20, ... until **all** shortcodes in a set are unique.
+- **Uniqueness scope (must be enforced):**
+  - all folders (global set)
+  - conversations within a folder
+  - messages within a conversation
+  - attachments within a message (including inline and item attachments)
+- **Reversibility:** every shortcode must be reversible to its original Graph ID via persisted mappings.
+
+Mapping requirements:
+
+- Folder shortcodes are stored in `.dsed/index/shortcodes/folders.json`, and each folder node in `.dsed/index/folders.json` includes a `shortcode`.
+- Conversation indices embed `conversationShortcodes`, `messageShortcodes`, and per-message `shortcode`.
+- Each message folder contains `attachment_shortcodes.json` plus `files_map.json` entries with `attachmentShortcode`.
+
+All directory names and attachment filenames must use shortcodes.
+
+---
+
+## 3. Input model (prebuilt index)
 
 DSED assumes a prebuilt, authoritative conversation index per folder:
 
 ```
-.dsed/index/conversations-organized/<folder_id>.json
+.dsed/index/conversations-organized/__<folder_shortcode>__.json
 ```
 
 Conceptual structure:
 
 ```json
-[
-  {
-    "conversationId": "...",
-    "messages": [
-      { "id": "..." },
-      { "id": "..." }
-    ]
-  }
-]
+{
+  "folderId": "...",
+  "folderShortcode": "__abcd1234__",
+  "conversationShortcodes": { "__c0ffee01__": "..." },
+  "conversations": [
+    {
+      "conversationId": "...",
+      "conversationShortcode": "__c0ffee01__",
+      "messageShortcodes": { "__deadbeef__": "..." },
+      "messages": [
+        { "id": "...", "shortcode": "__deadbeef__" }
+      ]
+    }
+  ]
+}
 ```
 
 Rules:
@@ -44,15 +73,16 @@ Rules:
 
 ---
 
-## 3. Cache and export layout (authoritative)
+## 4. Cache and export layout (authoritative)
 
 For each folder:
 
 ```
-.dsed/caches/<folder_id>/
-  <conversation_id>/
-    <message_id>/
+.dsed/caches/__<folder_shortcode>__/
+  __<conversation_shortcode>__/
+    __<message_shortcode>__/
       message.json
+      attachment_shortcodes.json
       files_map.json
       body.html | body.txt
       uniqueBody.html | uniqueBody.txt
@@ -68,14 +98,14 @@ For each folder:
 Rules:
 
 - All directories are created deterministically, even if empty.
-- Conversation IDs and message IDs are always used for directory names.
+- Shortcodes are always used for directory names.
 - Filenames are **not authoritative**; mappings are.
 
 ---
 
-## 4. Filename sanitization and mapping (critical rule)
+## 5. Filename sanitization and mapping (critical rule)
 
-### 4.1 Sanitized filenames
+### 5.1 Sanitized filenames
 
 When saving any binary file (attachments or inline):
 
@@ -94,7 +124,7 @@ The goal is that files remain:
 - openable by common tools
 - stable across platforms
 
-### 4.2 `files_map.json` (mandatory)
+### 5.2 `files_map.json` (mandatory)
 
 Every message directory contains a `files_map.json` file. This file is the **authoritative record** linking Graph objects to on-disk files.
 
@@ -103,6 +133,7 @@ Every downloaded attachment or inline blob MUST have an entry.
 Each entry records:
 
 - `attachmentId`
+- `attachmentShortcode`
 - attachment type (`fileAttachment`, `referenceAttachment`, `itemAttachment`)
 - `isInline` (boolean)
 - `originalName` (as provided by Graph)
@@ -121,15 +152,15 @@ This guarantees:
 
 ---
 
-## 5. Download algorithm (per folder)
+## 6. Download algorithm (per folder)
 
-### 5.1 Iterate conversations
+### 6.1 Iterate conversations
 
 For each conversation in the index:
 
-- Create `.dsed/caches/<folder_id>/<conversation_id>/`
+- Create `.dsed/caches/__<folder_shortcode>__/__<conversation_shortcode>__/`
 
-### 5.2 Iterate messages (ordered)
+### 6.2 Iterate messages (ordered)
 
 For each message ID:
 
@@ -139,9 +170,9 @@ For each message ID:
 
 ---
 
-## 6. Message retrieval and metadata
+## 7. Message retrieval and metadata
 
-### 6.1 Fetch message
+### 7.1 Fetch message
 
 - Fetch the message from Graph fresh.
 - Store verbatim metadata in `message.json`.
@@ -158,28 +189,28 @@ Recommended fields include:
 
 Do not store `body.content` or `uniqueBody.content` in `message.json`; the body data lives in `body.html` / `body.txt` files.
 
-### 6.2 Canonical content rule
+### 7.2 Canonical content rule
 
 - `body` is canonical and intended for human inspection.
 - `uniqueBody` is heuristic and provided for convenience only.
 
 ---
 
-## 7. Body export rules
+## 8. Body export rules
 
-### 7.1 Primary body
+### 8.1 Primary body
 
 - Use the server-default representation (no `Prefer` header).
 - If `contentType == "html"` → `body.html`
 - If `contentType == "text"` → `body.txt`
 - If missing → record null in JSON and omit the file (or create empty; be consistent).
 
-### 7.2 Unique body
+### 8.2 Unique body
 
 - Export `uniqueBody` in the same representation:
   - `uniqueBody.html` or `uniqueBody.txt`
 
-### 7.3 Optional text alternative (future feature)
+### 8.3 Optional text alternative (future feature)
 
 - Optional second request with:
   ```
@@ -190,21 +221,21 @@ Do not store `body.content` or `uniqueBody.content` in `message.json`; the body 
 
 ---
 
-## 8. Attachment handling
+## 9. Attachment handling
 
-### 8.1 Attachment discovery
+### 9.1 Attachment discovery
 
 - Fetch `/messages/{id}/attachments`.
 - Store full metadata in `attachments.json` or embedded in `message.json`.
 
-### 8.2 Attachment types
+### 9.2 Attachment types
 
 #### A) Reference / link attachments
 
 - No binary download.
 - Save metadata to:
   ```
-  attachments/links/<attachment_id>.json
+  attachments/links/__<attachment_shortcode>__.json
   ```
 - Record an entry in `files_map.json` indicating no local file.
 
@@ -213,7 +244,7 @@ Do not store `body.content` or `uniqueBody.content` in `message.json`; the body 
 - Download bytes via `.../attachments/{id}/$value`.
 - Save to:
   ```
-  attachments/files/<attachment_id>__<sanitizedName>
+  attachments/files/__<attachment_shortcode>__<sanitizedName>
   ```
 - Record mapping in `files_map.json`.
 
@@ -222,7 +253,7 @@ Do not store `body.content` or `uniqueBody.content` in `message.json`; the body 
 - Download bytes like normal file attachments.
 - Save to:
   ```
-  inline/<attachment_id>__<sanitizedName>
+  inline/__<attachment_shortcode>__<sanitizedName>
   ```
 - Record mapping, including `contentId` / `contentLocation`.
 
@@ -230,7 +261,7 @@ Do not store `body.content` or `uniqueBody.content` in `message.json`; the body 
 
 - Create:
   ```
-  attachments/items/<attachment_id>/
+  attachments/items/__<attachment_shortcode>__/
   ```
 - Export embedded items:
   - Messages → nested message export using the same rules
@@ -240,28 +271,28 @@ Do not store `body.content` or `uniqueBody.content` in `message.json`; the body 
 
 ---
 
-## 9. Inline attachment rewrite (HTML only)
+## 10. Inline attachment rewrite (HTML only)
 
-### 9.1 When to rewrite
+### 10.1 When to rewrite
 
 - Body is HTML **and**
 - At least one inline attachment has a usable `contentId` (or `contentLocation`).
 
-### 9.2 Rewrite procedure
+### 10.2 Rewrite procedure
 
 1. Save original HTML to `body_noParse.html`.
 2. Build a CID → local path map using `files_map.json`.
 3. Rewrite only matching `cid:` references.
 4. Save rewritten HTML as `body.html`.
 
-### 9.3 Text bodies
+### 10.3 Text bodies
 
 - Inline rendering is not meaningful for plain text.
 - No rewrite required (optional placeholder replacement only).
 
 ---
 
-## 10. Consistency rules (non-negotiable)
+## 11. Consistency rules (non-negotiable)
 
 - Always produce the same directory skeleton.
 - Always record metadata and mappings.
@@ -271,11 +302,11 @@ Do not store `body.content` or `uniqueBody.content` in `message.json`; the body 
 
 ---
 
-## 11. Progress reporting (CLI)
+## 12. Progress reporting (CLI)
 
 DSED provides folder-scoped progress reporting using a single `tqdm` progress bar per folder.
 
-### 11.1 Progress unit definition
+### 12.1 Progress unit definition
 
 For a given folder, the progress bar total (`total_items`) is computed as:
 
@@ -284,7 +315,7 @@ For a given folder, the progress bar total (`total_items`) is computed as:
 Where `folder_index` is loaded from:
 
 ```
-.dsed/index/conversations-organized/<folder_id>.json
+.dsed/index/conversations-organized/__<folder_shortcode>__.json
 ```
 
 Notes:
@@ -293,7 +324,7 @@ Notes:
 - **Recursive walking for item attachments is intentionally excluded** from the item count, because recursion occurs later during attachment download.
 - Attachment download work (including recursion) may therefore cause uneven time per tick; this is acceptable for the current UX goals.
 
-### 11.2 Labeling and folder positioning
+### 12.2 Labeling and folder positioning
 
 The progress bar label must be:
 
@@ -308,13 +339,13 @@ Implementation detail:
 
 - The exact source of folder display name and folder ordering may differ depending on the codebase structure; the implementing agent should inspect the existing index and folder enumeration logic to locate the appropriate fields.
 
-### 11.3 Progress update timing
+### 12.3 Progress update timing
 
 Increment the progress bar by 1 for each top-level message after the message’s export step completes for that folder scope (i.e., after message metadata/body export and top-level attachment handling initiation, according to the project’s existing pipeline stages).
 
 ---
 
-## 12. Design stance (summary)
+## 13. Design stance (summary)
 
 > **Messages are independent documents.** **Conversations are organizational overlays.** **Filenames are UI; mappings are truth.**
 
