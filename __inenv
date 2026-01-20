@@ -1,7 +1,42 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -e
 
-dn="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-source "$dn/.venv/Scripts/activate"
+dn="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+is_windows=false
+is_wsl=false
+
+# Detect Windows shells (Git Bash, MSYS2, MINGW)
+case "$(uname -s)" in
+  CYGWIN*|MINGW*|MSYS*)
+    is_windows=true
+    ;;
+esac
+
+# Detect WSL (Ubuntu 22.04 compatible)
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  is_wsl=true
+fi
+
+# Choose venv activate script
+if $is_windows; then
+  activate="$dn/.venv/Scripts/activate"
+else
+  activate="$dn/.venv-wsl/bin/activate"
+fi
+
+# Fallbacks / safety checks
+if [[ ! -f "$activate" ]]; then
+  echo "Error: virtualenv activate script not found:"
+  echo "  $activate"
+  exit 1
+fi
+
+# Activate environment
+source "$activate"
+
 export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$dn"
+
 "$@"
+
 deactivate

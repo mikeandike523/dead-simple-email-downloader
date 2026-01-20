@@ -41,6 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 .venv
+.venv-wsl
 
 # App State Including JWTs
 .dsed
