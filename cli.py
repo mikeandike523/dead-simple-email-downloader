@@ -19,6 +19,7 @@ from pysrc.cli_routes.outlook.index import impl_outlook_index
 from pysrc.cli_routes.outlook.download import impl_outlook_download
 from pysrc.cli_routes.outlook.safe_delete import impl_outlook_safe_delete
 from pysrc.cli_routes.outlook.logout import impl_outlook_logout
+from pysrc.cli_routes.outlook.total_emails import impl_outlook_total_emails
 
 
 
@@ -60,6 +61,10 @@ def outlook_index(reset=False):
 @outlook.command("download")
 def outlook_download():
     return impl_outlook_download()
+
+@outlook.command("total-emails")
+def outlook_total_emails():
+    return impl_outlook_total_emails()
 
 
 @outlook.command("safe-delete")
