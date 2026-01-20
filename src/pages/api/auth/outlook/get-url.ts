@@ -11,7 +11,9 @@ const SCOPES = [
   "offline_access",
   "User.Read",
   "Mail.Read",
+  "Mail.ReadWrite",
   "Mail.Read.Shared",
+  "Mail.ReadWrite.Shared",
 ];
 
 export default async function handler(

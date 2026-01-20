@@ -496,3 +496,128 @@ export async function callGraphJSON<
     }
   }
 }
+
+export async function callGraphBinary({
+  minMinutesRemaining = 30,
+  openidSub,
+  route,
+  method = "GET",
+  urlParams,
+  version = "v1.0",
+  baseUrl = "https://graph.microsoft.com",
+  timeoutMs,
+  silent = false,
+  additionalHeaders = {},
+}: {
+  minMinutesRemaining?: number;
+  openidSub: string;
+  route: string;
+  method?: HttpMethod;
+  urlParams?: UrlParams;
+  version?: "v1.0" | "beta";
+  baseUrl?: string;
+  timeoutMs?: number;
+  silent?: boolean;
+  additionalHeaders?: Record<string, string>;
+}): Promise<Response> {
+  const now =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? () => performance.now()
+      : () => Date.now();
+
+  let url;
+  let cleanRoute;
+  if (!route.startsWith("http://") && !route.startsWith("https://")) {
+    cleanRoute = route.startsWith("/") ? route : `/${route}`;
+    const qs = buildGraphQueryString(urlParams);
+    url = `${baseUrl}/${version}${cleanRoute}${qs}`;
+  } else {
+    cleanRoute = route.split("?")[0].substring(baseUrl.length);
+    url = route;
+  }
+
+  const tEnsureStart = now();
+  await ensureAccessToken(openidSub, minMinutesRemaining);
+  const ensureMs = now() - tEnsureStart;
+
+  const token = await getCurrentAccessToken(openidSub);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    ...additionalHeaders,
+  };
+
+  const initBase: RequestInit = {
+    method,
+    headers,
+  };
+
+  let attempt = 0;
+
+  for (;;) {
+    attempt++;
+    const tFetchStart = now();
+    try {
+      const res = await fetchWithTimeout(url, { ...initBase, timeoutMs });
+      const fetchMs = now() - tFetchStart;
+
+      if (
+        !res.ok &&
+        isRetriableStatus(res.status) &&
+        attempt < DEFAULT_MAX_ATTEMPTS
+      ) {
+        const retryAfterMs = getRetryAfterMs(res.headers);
+        const delayMs = computeBackoffMs(attempt, retryAfterMs);
+
+        if (!silent) {
+          console.info(
+            `[callGraphBinary] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+              0
+            )}ms | graphFetch=${fetchMs.toFixed(0)}ms | status=${
+              res.status
+            } -> retrying in ${delayMs}ms (attempt ${attempt}/${DEFAULT_MAX_ATTEMPTS})`
+          );
+        }
+
+        await sleep(delayMs);
+        continue;
+      }
+
+      if (!silent) {
+        console.info(
+          `[callGraphBinary] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+            0
+          )}ms | graphFetch=${fetchMs.toFixed(0)}ms`
+        );
+      }
+
+      return res;
+    } catch (err) {
+      const fetchMs = now() - tFetchStart;
+      if (attempt < DEFAULT_MAX_ATTEMPTS) {
+        const delayMs = computeBackoffMs(attempt, null);
+        if (!silent) {
+          console.info(
+            `[callGraphBinary] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
+              0
+            )}ms | graphFetch=${fetchMs.toFixed(
+              0
+            )}ms (network error) -> retrying in ${delayMs}ms (attempt ${attempt}/${DEFAULT_MAX_ATTEMPTS}) | error=${
+              (err as Error)?.message ?? err
+            }`
+          );
+        }
+        await sleep(delayMs);
+        continue;
+      }
+
+      if (!silent) {
+        console.info(
+          `[callGraphBinary] ${method} ${cleanRoute} | retries exhausted | error=${
+            (err as Error)?.message ?? err
+          }`
+        );
+      }
+      throw err;
+    }
+  }
+}
