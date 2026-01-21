@@ -17,6 +17,7 @@ from pysrc.cli_routes.outlook.me import impl_outlook_me
 from pysrc.cli_routes.outlook.folders import impl_outlook_folders
 from pysrc.cli_routes.outlook.index import impl_outlook_index
 from pysrc.cli_routes.outlook.download import impl_outlook_download
+from pysrc.cli_routes.outlook.output import impl_outlook_output
 from pysrc.cli_routes.outlook.debug_download import impl_outlook_debug_download
 from pysrc.cli_routes.outlook.safe_delete import impl_outlook_safe_delete
 from pysrc.cli_routes.outlook.logout import impl_outlook_logout
@@ -63,6 +64,11 @@ def outlook_index(reset=False):
 @click.option("--reset", is_flag=True, default=False, help="Delete .dsed/caches before downloading.")
 def outlook_download(reset=False):
     return impl_outlook_download(reset)
+
+@outlook.command("output")
+@click.argument("outdir")
+def outlook_output(outdir):
+    return impl_outlook_output(outdir)
 
 @outlook.command("debug-download")
 @click.argument("features", nargs=-1)
