@@ -17,6 +17,8 @@ FEATURE_ALIASES: Dict[str, str] = {
     "body-text": "text-body",
     "regular-attachments": "regular-attachments",
     "attachments": "regular-attachments",
+    "file-attachments": "file-attachments",
+    "files": "file-attachments",
     "inline-attachments": "inline-attachments",
     "inline": "inline-attachments",
     "item-attachments": "item-attachments",
@@ -89,12 +91,22 @@ def _features_for_message_dir(message_dir: str) -> Set[str]:
         features.add("text-body")
 
     attachments_root = os.path.join(message_dir, "attachments")
-    if _dir_has_entries(os.path.join(attachments_root, "files"), want_files=True):
-        features.add("regular-attachments")
-    if _dir_has_entries(os.path.join(attachments_root, "items")):
+    has_file_attachments = _dir_has_entries(
+        os.path.join(attachments_root, "files"), want_files=True
+    )
+    has_item_attachments = _dir_has_entries(os.path.join(attachments_root, "items"))
+    has_link_attachments = _dir_has_entries(
+        os.path.join(attachments_root, "links"), want_files=True
+    )
+
+    if has_file_attachments:
+        features.add("file-attachments")
+    if has_item_attachments:
         features.add("item-attachments")
-    if _dir_has_entries(os.path.join(attachments_root, "links"), want_files=True):
+    if has_link_attachments:
         features.add("link-attachments")
+    if has_file_attachments or has_item_attachments or has_link_attachments:
+        features.add("regular-attachments")
 
     if _dir_has_entries(os.path.join(message_dir, "inline"), want_files=True):
         features.add("inline-attachments")

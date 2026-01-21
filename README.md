@@ -112,9 +112,12 @@ Supported feature keys:
 - `html-body`
 - `text-body`
 - `regular-attachments`
+- `file-attachments`
 - `inline-attachments`
 - `item-attachments`
 - `link-attachments`
+
+`regular-attachments` is a catch-all for any file/item/link attachment; use the specific keys for a narrower match.
 
 ### Safe delete
 
