@@ -67,8 +67,15 @@ def outlook_download(reset=False):
 
 @outlook.command("output")
 @click.argument("outdir")
-def outlook_output(outdir):
-    return impl_outlook_output(outdir)
+@click.option(
+    "--max-subject-chars",
+    type=click.IntRange(min=1),
+    default=36,
+    show_default=True,
+    help="Maximum subject length to include in output folder names.",
+)
+def outlook_output(outdir, max_subject_chars=36):
+    return impl_outlook_output(outdir, max_subject_chars=max_subject_chars)
 
 @outlook.command("debug-download")
 @click.argument("features", nargs=-1)

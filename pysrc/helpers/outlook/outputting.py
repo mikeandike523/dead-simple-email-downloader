@@ -88,7 +88,10 @@ def _truncate_subject(value: str, limit: int = 36) -> str:
         trimmed = trimmed[:-1]
     elif len(trimmed) >= 2 and trimmed[-2] == "%":
         trimmed = trimmed[:-2]
-    return trimmed
+    removed = len(value) - len(trimmed)
+    if removed <= 0:
+        return trimmed
+    return f"{trimmed}...({removed} more)"
 
 
 def _ensure_dir(path: str) -> None:
@@ -225,7 +228,7 @@ def _copy_message_cache(cache_dir: str, output_dir: str) -> bool:
     return True
 
 
-def export_outlook_output(outdir: str) -> int:
+def export_outlook_output(outdir: str, max_subject_chars: int = 36) -> int:
     forest = _load_folder_forest()
     if forest is None:
         return -1
@@ -325,7 +328,10 @@ def export_outlook_output(outdir: str) -> int:
             conv_subject_raw = (
                 first_meta.get("subject") if isinstance(first_meta, dict) else None
             )
-            conv_subject = _truncate_subject(_safe_filename(conv_subject_raw or "no_subject"))
+            conv_subject = _truncate_subject(
+                _safe_filename(conv_subject_raw or "no_subject"),
+                limit=max_subject_chars,
+            )
             conv_label = _format_datetime_label(conv_dt)
             conv_prefix = _order_prefix(conv_index, total_conversations)
             conv_dir_name = (
@@ -361,7 +367,10 @@ def export_outlook_output(outdir: str) -> int:
 
                 msg_dt = _message_datetime(message_meta)
                 msg_subject_raw = message_meta.get("subject") or "no_subject"
-                msg_subject = _truncate_subject(_safe_filename(msg_subject_raw))
+                msg_subject = _truncate_subject(
+                    _safe_filename(msg_subject_raw),
+                    limit=max_subject_chars,
+                )
                 msg_label = _format_datetime_label(msg_dt)
                 msg_prefix = _order_prefix(msg_index, total_messages)
                 msg_dir_name = (
