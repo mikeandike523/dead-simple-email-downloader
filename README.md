@@ -97,6 +97,25 @@ Indexing builds the local `.dsed/index` artifacts that the download step relies 
 - `python cli.py outlook download --reset`
   - Deletes `.dsed/caches` and exits (no download).
 
+### Debug download picking
+
+Find a random downloaded message that includes specific features, or build a local index to speed future searches.
+
+- `python cli.py outlook debug-download html-body text-body regular-attachments`
+  - Prints the path to a matching message folder.
+  - Prints `no messages with requested features` if none match.
+- `python cli.py outlook debug-download --index`
+  - Builds `.dsed/debug/debug-download.json` and exits (no search).
+
+Supported feature keys:
+
+- `html-body`
+- `text-body`
+- `regular-attachments`
+- `inline-attachments`
+- `item-attachments`
+- `link-attachments`
+
 ### Safe delete
 
 Safely find and delete messages by exact sender/subject or regex subject.
@@ -114,6 +133,7 @@ Safely find and delete messages by exact sender/subject or regex subject.
 - `.dsed/index/` - index artifacts (folders, message ids, metadata, conversations).
 - `.dsed/caches/` - downloaded messages, attachments, and body content.
 - `.dsed/debug/` - diagnostic output (folder listings, errors).
+- `.dsed/debug/debug-download.json` - debug index for random feature-based message lookup.
 - `database/db_data/` - MySQL and phpMyAdmin volumes.
 
 ## Common workflows
