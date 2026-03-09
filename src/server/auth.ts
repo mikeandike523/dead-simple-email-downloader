@@ -17,7 +17,9 @@ export type AuthAudience = "web" | "cli";
 export type AuthUser = {
   sub: string;
   aud: AuthAudience;
-  raw?: JWTPayload; // optional: keep full payload for roles/scopes
+  provider?: string; // e.g. "exchange"
+  product?: string;  // e.g. "outlook"
+  raw?: JWTPayload;
 };
 
 // --- helpers ---
@@ -34,7 +36,13 @@ export async function verifyCliToken(token: string): Promise<AuthUser> {
     clockTolerance: "60s",
   });
   if (!payload.sub) throw new Error("missing sub");
-  return { sub: String(payload.sub), aud: "cli", raw: payload };
+  return {
+    sub: String(payload.sub),
+    aud: "cli",
+    provider: typeof payload.provider === "string" ? payload.provider : undefined,
+    product: typeof payload.product === "string" ? payload.product : undefined,
+    raw: payload,
+  };
 }
 
 export async function verifyWebToken(token: string): Promise<AuthUser> {

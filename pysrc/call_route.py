@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Tuple, Optional, Union
 from pysrc.utils.summarize_response import summarize_response
 
 BASE_URL = "http://localhost:3000"  # change if needed
-JWT_PATH = ".dsed/jwt.json"
+JWT_PATH = ".dsed/jwt.json"  # legacy path — kept for backward compat
 
 # Assumes summarize_response(resp: requests.Response) -> object with .ok, .status, .text, .data
 # You can keep your existing implementation.
@@ -36,10 +36,27 @@ def _flatten_params(params: Dict[str, Any]) -> List[Tuple[str, str]]:
             out.append((k, str(v)))
     return out
 
-def _load_jwt(jwt_path: str = JWT_PATH) -> Optional[str]:
-    if not os.path.exists(jwt_path):
-        print(colored("JWT not found. Please login first.", "red"))
+def _load_jwt(provider: str = "exchange") -> Optional[str]:
+    """
+    Load the CLI JWT for the given provider.
+    Looks in .dsed/auth/<provider>.json first; falls back to legacy .dsed/jwt.json.
+    """
+    new_path = os.path.join(".dsed", "auth", f"{provider}.json")
+    legacy_path = JWT_PATH
+
+    # Prefer new namespaced path; fall back to legacy for existing users
+    if os.path.exists(new_path):
+        jwt_path = new_path
+    elif os.path.exists(legacy_path):
+        jwt_path = legacy_path
+    else:
+        print(colored(
+            f"JWT not found for provider '{provider}'. "
+            f"Run 'dsed {provider} outlook login' first.",
+            "red",
+        ))
         return None
+
     with open(jwt_path, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
@@ -67,6 +84,7 @@ def call_route(
     json_body: Optional[Union[Dict[str, Any], str, int, float, None]] = None,
     method: Optional[str] = None,
     save_debug_to: Optional[str] = None,  # e.g. ".dsed/debug/folders.json"
+    provider: str = "exchange",
 ):
     """
     Generic caller for predictable backend routes.
@@ -78,11 +96,12 @@ def call_route(
         json_body: dict sent as JSON (if provided and method not set, uses POST)
         method: force "GET"/"POST"/... If None, infer (POST if json_body else GET)
         save_debug_to: optional path to write resp.data prettified JSON on success
+        provider: OAuth provider key used to load the correct JWT
 
     Returns:
         summarize_response(requests.Response)
     """
-    jwt = _load_jwt()
+    jwt = _load_jwt(provider)
     if not jwt:
         return None
 

@@ -17,30 +17,34 @@ type UrlParams = Record<string, Primitive | Primitive[]>;
  *
  * @param openidSub
  */
-async function getNewAccessToken(openidSub: string, txn?: PoolConnection) {
+async function getNewAccessToken(
+  openidSub: string,
+  provider: string,
+  product: string,
+  scopes?: string[],
+  txn?: PoolConnection
+) {
   await withTransaction(
     async (txn) => {
-      console.info(`Getting new access token for user ${openidSub}`);
+      console.info(`Getting new access token for user ${openidSub} (${provider}/${product})`);
 
       const refreshTokensResult = await dbQuery(
-        `SELECT refresh_token from oauth_tokens WHERE openid_sub = ?`,
-        [openidSub],
+        `SELECT refresh_token from oauth_tokens WHERE openid_sub = ? AND provider = ?`,
+        [openidSub, provider],
         txn
       );
       if (refreshTokensResult.length === 0) {
-        throw new Error("No refresh token found for this user");
+        throw new Error(`No refresh token found for user ${openidSub} / provider ${provider}`);
       }
       const refreshToken = refreshTokensResult[0].refresh_token;
       const body = new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
-        client_id: process.env.AZURE_CLIENT_ID!, // required
-        // If this is a confidential client (server app), include client_secret:
+        client_id: process.env.AZURE_CLIENT_ID!,
         ...(process.env.AZURE_CLIENT_SECRET
           ? { client_secret: process.env.AZURE_CLIENT_SECRET }
           : {}),
-        // Optional: request the same (or subset) scopes you already had
-        // scope: "User.Read Mail.Read"
+        ...(scopes?.length ? { scope: scopes.join(" ") } : {}),
       });
 
       const tokenResponse = await summarizeResponse(
@@ -52,7 +56,7 @@ async function getNewAccessToken(openidSub: string, txn?: PoolConnection) {
               "Content-Type": "application/x-www-form-urlencoded",
             },
             body,
-            timeoutMs: 5000, // 5 seconds timeout
+            timeoutMs: 5000,
           }
         )
       );
@@ -72,17 +76,15 @@ async function getNewAccessToken(openidSub: string, txn?: PoolConnection) {
       const td = tokenData as {
         token_type: "Bearer";
         access_token: string;
-        expires_in: number; // seconds
+        expires_in: number;
         scope?: string;
-        refresh_token?: string; // may be present (rotation)
+        refresh_token?: string;
       };
 
       if (td.refresh_token) {
         const execResponse = await dbExec(
-          `
-UPDATE oauth_tokens SET refresh_token = ? WHERE openid_sub = ?        
-        `,
-          [td.refresh_token, openidSub],
+          `UPDATE oauth_tokens SET refresh_token = ? WHERE openid_sub = ? AND provider = ?`,
+          [td.refresh_token, openidSub, provider],
           txn
         );
         if (execResponse.affectedRows !== 1) {
@@ -96,11 +98,10 @@ UPDATE oauth_tokens SET refresh_token = ? WHERE openid_sub = ?
       );
       await dbExec(
         `
-INSERT INTO access_tokens (openid_sub, access_token, expires_at) VALUES (?,?,?)
-on DUPLICATE KEY UPDATE access_token = VALUES(access_token), expires_at = VALUES(expires_at)
-
+INSERT INTO access_tokens (openid_sub, provider, product, access_token, expires_at) VALUES (?,?,?,?,?)
+ON DUPLICATE KEY UPDATE access_token = VALUES(access_token), expires_at = VALUES(expires_at)
 `,
-        [openidSub, accessToken, expiresAt],
+        [openidSub, provider, product, accessToken, expiresAt],
         txn
       );
     },
@@ -116,12 +117,10 @@ on DUPLICATE KEY UPDATE access_token = VALUES(access_token), expires_at = VALUES
  *
  * @param openidSub
  */
-async function checkAccessToken(openidSub: string, txn?: PoolConnection) {
+async function checkAccessToken(openidSub: string, provider: string, product: string, txn?: PoolConnection) {
   const accessTokensResult = await dbQuery(
-    `
-        SELECT access_token from access_tokens WHERE openid_sub = ?
-            `,
-    [openidSub],
+    `SELECT access_token from access_tokens WHERE openid_sub = ? AND provider = ? AND product = ?`,
+    [openidSub, provider, product],
     txn
   );
 
@@ -164,39 +163,35 @@ async function checkAccessToken(openidSub: string, txn?: PoolConnection) {
  */
 export async function ensureAccessToken(
   openidSub: string,
+  provider = "exchange",
+  product = "outlook",
   minMinutesRemaining = 30,
+  scopes?: string[],
   txn?: PoolConnection
 ) {
   await withTransaction(
     async (txn) => {
       const accessTokensResult = await dbQuery(
-        `
-SELECT access_token, expires_at from access_tokens WHERE openid_sub = ?
-    `,
-        [openidSub],
+        `SELECT access_token, expires_at from access_tokens WHERE openid_sub = ? AND provider = ? AND product = ?`,
+        [openidSub, provider, product],
         txn
       );
 
-      // If no tokens yet, then we know we need to call getNewAccessToken
       if (accessTokensResult.length === 0) {
-        return await getNewAccessToken(openidSub, txn);
+        return await getNewAccessToken(openidSub, provider, product, scopes, txn);
       }
 
-      // We know accessTokens.length === 1 due to unique constraint over openid_sub
       const accessTokenData = accessTokensResult[0];
       const expiresAt = sqlUtcTimestampToDate(accessTokenData.expires_at);
       const now = new Date();
       const remainingMinutes = (expiresAt.getTime() - now.getTime()) / 60000;
-      // If we don't have enough time left, then we need to call getNewAccessToken
       if (remainingMinutes <= minMinutesRemaining) {
-        return await getNewAccessToken(openidSub, txn);
+        return await getNewAccessToken(openidSub, provider, product, scopes, txn);
       }
 
-      // At this point, we now need to touch the graph endpoint to make sure the token
-      // we have is good, and if not, then we need to call getNewAccessToken
-      const isValid = await checkAccessToken(openidSub, txn);
+      const isValid = await checkAccessToken(openidSub, provider, product, txn);
       if (!isValid) {
-        return await getNewAccessToken(openidSub, txn);
+        return await getNewAccessToken(openidSub, provider, product, scopes, txn);
       }
     },
     { connection: txn }
@@ -204,20 +199,19 @@ SELECT access_token, expires_at from access_tokens WHERE openid_sub = ?
 }
 
 export async function getCurrentAccessToken(
-  openidSub: string
+  openidSub: string,
+  provider = "exchange",
+  product = "outlook"
 ): Promise<string | null> {
   const accessTokensResult = await dbQuery(
-    `
-        SELECT access_token from access_tokens WHERE openid_sub =?
-            `,
-    [openidSub]
+    `SELECT access_token from access_tokens WHERE openid_sub = ? AND provider = ? AND product = ?`,
+    [openidSub, provider, product]
   );
 
   if (accessTokensResult.length === 0) {
     return null;
   }
 
-  // We know accessTokens.length === 1 due to unique constraint over openid_sub
   const accessTokenData = accessTokensResult[0];
   return accessTokenData.access_token;
 }
@@ -341,6 +335,9 @@ export async function callGraphJSON<
 >({
   minMinutesRemaining = 30,
   openidSub,
+  provider = "exchange",
+  product = "outlook",
+  scopes,
   route,
   method = "GET",
   urlParams,
@@ -353,6 +350,9 @@ export async function callGraphJSON<
 }: {
   minMinutesRemaining?: number;
   openidSub: string;
+  provider?: string;
+  product?: string;
+  scopes?: string[];
   route: string;
   method?: HttpMethod;
   urlParams?: UrlParams;
@@ -382,7 +382,7 @@ export async function callGraphJSON<
   // --- ensureAccessToken timing ---
   const tEnsureStart = now();
   try {
-    await ensureAccessToken(openidSub, minMinutesRemaining);
+    await ensureAccessToken(openidSub, provider, product, minMinutesRemaining, scopes);
   } catch (err) {
     const ensureMs = now() - tEnsureStart;
     if (!silent) {
@@ -398,7 +398,7 @@ export async function callGraphJSON<
   }
   const ensureMs = now() - tEnsureStart;
 
-  const token = await getCurrentAccessToken(openidSub);
+  const token = await getCurrentAccessToken(openidSub, provider, product);
 
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${token}`,
@@ -500,6 +500,9 @@ export async function callGraphJSON<
 export async function callGraphBinary({
   minMinutesRemaining = 30,
   openidSub,
+  provider = "exchange",
+  product = "outlook",
+  scopes,
   route,
   method = "GET",
   urlParams,
@@ -511,6 +514,9 @@ export async function callGraphBinary({
 }: {
   minMinutesRemaining?: number;
   openidSub: string;
+  provider?: string;
+  product?: string;
+  scopes?: string[];
   route: string;
   method?: HttpMethod;
   urlParams?: UrlParams;
@@ -537,10 +543,10 @@ export async function callGraphBinary({
   }
 
   const tEnsureStart = now();
-  await ensureAccessToken(openidSub, minMinutesRemaining);
+  await ensureAccessToken(openidSub, provider, product, minMinutesRemaining, scopes);
   const ensureMs = now() - tEnsureStart;
 
-  const token = await getCurrentAccessToken(openidSub);
+  const token = await getCurrentAccessToken(openidSub, provider, product);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     ...additionalHeaders,
