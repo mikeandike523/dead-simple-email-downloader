@@ -3,22 +3,30 @@ import os
 from time import sleep
 import webbrowser
 
+import click
 import requests
 from termcolor import colored
 
 from pysrc.utils.summarize_response import summarize_response
+from pysrc.utils.scope_summary import print_scope_summary
 
 PROVIDER = "google"
 PRODUCT = "gmail"
 BASE_URL = "http://localhost:3000"
 
 
-def impl_google_gmail_login():
+def impl_google_gmail_login(for_commands: tuple[str, ...], summarize_scopes: bool):
+    commands = list(for_commands)
+
+    if summarize_scopes:
+        return print_scope_summary(BASE_URL, PROVIDER, PRODUCT, commands)
+
+    params: dict = {"product": PRODUCT}
+    if commands:
+        params["commands"] = ",".join(commands)
+
     resp = summarize_response(
-        requests.get(
-            f"{BASE_URL}/api/auth/google/get-url",
-            params={"product": PRODUCT},
-        )
+        requests.get(f"{BASE_URL}/api/auth/google/get-url", params=params)
     )
 
     if not resp.ok:
@@ -38,6 +46,9 @@ def impl_google_gmail_login():
         print(colored("Invalid authorization URL:", "red"))
         print(authorize_url)
         return -1
+
+    if commands:
+        print(colored(f"Requesting scopes for commands: {', '.join(commands)}", "cyan"))
 
     webbrowser.open_new_tab(authorize_url)
 

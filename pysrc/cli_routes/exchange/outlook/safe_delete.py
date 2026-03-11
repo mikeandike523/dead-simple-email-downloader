@@ -63,7 +63,7 @@ def impl_exchange_outlook_safe_delete(
         return -1
 
     resp = call_route(
-        "/outlook/safe-delete/find",
+        "/exchange/outlook/safe-delete/find",
         "Finding matching messages...",
         json_body={
             "exactSender": exact_sender,
@@ -131,7 +131,7 @@ def impl_exchange_outlook_safe_delete(
             return 0
 
     delete_resp = call_route(
-        "/outlook/safe-delete/delete",
+        "/exchange/outlook/safe-delete/delete",
         "Deleting messages..." if not soft else "Moving messages to trash...",
         json_body={
             "messageIds": [m.get("id") for m in matches if m.get("id")],

@@ -26,7 +26,7 @@ def impl_exchange_outlook_index(reset=False):
 
         if not os.path.isfile(folders_path):
             resp_folders = call_route(
-                "/outlook/indexing/get-folders",
+                "/exchange/outlook/indexing/get-folders",
                 "Fetching folder info...",
                 provider="exchange",
             )

@@ -9,6 +9,14 @@ from termcolor import colored
 
 from pysrc.utils.docker_ports import get_compose_port
 
+
+def _split_commands(ctx, param, values):
+    """Allow comma-separated values in addition to repeated flags.
+    -c manage,download  →  ("manage", "download")
+    -c manage -c download  →  ("manage", "download")
+    """
+    return tuple(cmd.strip() for v in values for cmd in v.split(",") if cmd.strip())
+
 # ---------------------------------------------------------------------------
 # Command implementations (exchange/outlook)
 # ---------------------------------------------------------------------------
@@ -29,6 +37,7 @@ from pysrc.cli_routes.exchange.outlook.debug_download import impl_exchange_outlo
 from pysrc.cli_routes.google.gmail.login import impl_google_gmail_login
 from pysrc.cli_routes.google.gmail.logout import impl_google_gmail_logout
 from pysrc.cli_routes.google.gmail.me import impl_google_gmail_me
+from pysrc.cli_routes.google.gmail.folders import impl_google_gmail_folders
 
 # ---------------------------------------------------------------------------
 # CLI root
@@ -57,9 +66,30 @@ def exchange_outlook():
 
 
 @exchange_outlook.command("login")
-def exchange_outlook_login():
-    """Authenticate with Microsoft and request Outlook scopes."""
-    return impl_exchange_outlook_login()
+@click.option("-c", "--for-commands", "for_commands", multiple=True, metavar="CMD",
+              callback=_split_commands, is_eager=False,
+              help="Scopes for these commands (-c safe-delete or -c safe-delete,download).")
+@click.option("--summarize-scopes", "summarize_scopes", is_flag=True, default=False,
+              help="Print scopes that would be requested (all commands if none specified) and exit.")
+def exchange_outlook_login(for_commands, summarize_scopes):
+    """Authenticate with Microsoft and request Outlook scopes.
+
+    By default only base scopes are requested (read-only).  Use -c to add
+    the extra scopes a specific command needs:
+
+    \b
+      dsed exchange outlook login                        # base scopes only
+      dsed exchange outlook login -c safe-delete         # + write scopes
+      dsed exchange outlook login -c safe-delete,download
+      dsed exchange outlook login -c safe-delete -c download
+
+    To inspect what scopes would be requested without starting a login:
+
+    \b
+      dsed exchange outlook login --summarize-scopes              # show all
+      dsed exchange outlook login -c safe-delete --summarize-scopes
+    """
+    return impl_exchange_outlook_login(for_commands=for_commands, summarize_scopes=summarize_scopes)
 
 
 @exchange_outlook.command("logout")
@@ -177,9 +207,30 @@ def google_gmail():
 
 
 @google_gmail.command("login")
-def google_gmail_login():
-    """Authenticate with Google and request Gmail scopes."""
-    return impl_google_gmail_login()
+@click.option("-c", "--for-commands", "for_commands", multiple=True, metavar="CMD",
+              callback=_split_commands, is_eager=False,
+              help="Scopes for these commands (-c manage or -c manage,download).")
+@click.option("--summarize-scopes", "summarize_scopes", is_flag=True, default=False,
+              help="Print scopes that would be requested (all commands if none specified) and exit.")
+def google_gmail_login(for_commands, summarize_scopes):
+    """Authenticate with Google and request Gmail scopes.
+
+    By default only base scopes are requested (read-only).  Use -c to add
+    the extra scopes a specific command needs:
+
+    \b
+      dsed google gmail login                  # base scopes only
+      dsed google gmail login -c manage        # + gmail.modify
+      dsed google gmail login -c manage,download
+      dsed google gmail login -c manage -c download
+
+    To inspect what scopes would be requested without starting a login:
+
+    \b
+      dsed google gmail login --summarize-scopes           # show all
+      dsed google gmail login -c manage --summarize-scopes
+    """
+    return impl_google_gmail_login(for_commands=for_commands, summarize_scopes=summarize_scopes)
 
 
 @google_gmail.command("logout")
@@ -192,6 +243,12 @@ def google_gmail_logout():
 def google_gmail_me():
     """Print the authenticated user's Google profile."""
     return impl_google_gmail_me()
+
+
+@google_gmail.command("folders")
+def google_gmail_folders():
+    """List Gmail labels with total, unread, and read message counts."""
+    return impl_google_gmail_folders()
 
 
 # ---------------------------------------------------------------------------

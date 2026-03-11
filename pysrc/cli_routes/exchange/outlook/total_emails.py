@@ -32,7 +32,7 @@ def _count_color(count):
 
 def impl_exchange_outlook_total_emails():
     resp = call_route(
-        "/outlook/indexing/get-folders",
+        "/exchange/outlook/indexing/get-folders",
         "Fetching folder info...",
         save_debug_to=".dsed/debug/folders.json",
         provider="exchange",
@@ -56,7 +56,7 @@ def impl_exchange_outlook_total_emails():
             return -1
 
         resp_meta = call_route(
-            "/outlook/indexing/get-folder-metadata",
+            "/exchange/outlook/indexing/get-folder-metadata",
             f"Fetching counts {i+1}/{len(folders)}: {folder_path}",
             json_body={"folderId": folder_id},
             provider="exchange",

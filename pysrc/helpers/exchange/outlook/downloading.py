@@ -133,11 +133,11 @@ def _rewrite_inline_html(
 
 
 def _get_message(message_id: str) -> Optional[Dict[str, Any]]:
-    return _api_request_json("/outlook/download/get-message", params={"messageId": message_id})
+    return _api_request_json("/exchange/outlook/download/get-message", params={"messageId": message_id})
 
 
 def _get_attachments(message_id: str) -> Optional[List[Dict[str, Any]]]:
-    data = _api_request_json("/outlook/download/get-attachments", params={"messageId": message_id})
+    data = _api_request_json("/exchange/outlook/download/get-attachments", params={"messageId": message_id})
     if isinstance(data, dict) and isinstance(data.get("attachments"), list):
         return data["attachments"]
     return None
@@ -145,21 +145,21 @@ def _get_attachments(message_id: str) -> Optional[List[Dict[str, Any]]]:
 
 def _get_attachment_with_item(message_id: str, attachment_id: str) -> Optional[Dict[str, Any]]:
     return _api_request_json(
-        "/outlook/download/get-attachment",
+        "/exchange/outlook/download/get-attachment",
         params={"messageId": message_id, "attachmentId": attachment_id},
     )
 
 
 def _get_attachment_value(message_id: str, attachment_id: str) -> Optional[Tuple[bytes, str]]:
     return _api_request_binary(
-        "/outlook/download/get-attachment-value",
+        "/exchange/outlook/download/get-attachment-value",
         params={"messageId": message_id, "attachmentId": attachment_id},
     )
 
 
 def _get_item_value(item_type: str, item_id: str) -> Optional[Tuple[bytes, str]]:
     return _api_request_binary(
-        "/outlook/download/get-item-value",
+        "/exchange/outlook/download/get-item-value",
         params={"itemType": item_type, "itemId": item_id},
     )
 

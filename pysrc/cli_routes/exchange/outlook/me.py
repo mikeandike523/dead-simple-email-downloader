@@ -4,7 +4,7 @@ from pysrc.call_route import call_route
 
 
 def impl_exchange_outlook_me():
-    resp = call_route("/outlook/me", "Fetching user info...", provider="exchange")
+    resp = call_route("/exchange/outlook/me", "Fetching user info...", provider="exchange")
     if resp is None:
         return -1
     print(colored("\nUser information:", "green"))

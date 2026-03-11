@@ -217,7 +217,7 @@ def export_outlook_output(outdir: str, max_subject_chars: int = 36) -> int:
             folder_shortcodes = json.load(f)
 
     user_data = None
-    resp = call_route("/outlook/me", "Fetching user info for output...")
+    resp = call_route("/exchange/outlook/me", "Fetching user info for output...")
     if resp is not None:
         user_data = resp.data
         if isinstance(user_data, dict) and "graphAccessToken" in user_data:

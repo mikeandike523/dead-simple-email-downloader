@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { randomString, signState } from "@/server/oidc-state";
 import { v4 as uuidv4 } from "uuid";
 import { dbExec } from "@/server/db";
-import { PRODUCT_SCOPES, type Product } from "@/server/scopes";
+import { resolveScopes, type Product } from "@/server/scopes";
 
 const PROVIDER = "google";
 
@@ -12,8 +12,11 @@ export default async function handler(
 ) {
   try {
     const productRaw = typeof req.query.product === "string" ? req.query.product : "gmail";
-    const scopes = PRODUCT_SCOPES[PROVIDER]?.[productRaw as Product];
-    if (!scopes) {
+    const commandsRaw = typeof req.query.commands === "string" ? req.query.commands : "";
+    const commands = commandsRaw ? commandsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+    const scopes = resolveScopes(PROVIDER, productRaw as Product, commands);
+    if (scopes.length === 0) {
       return res.status(400).json({ error: `Unknown product: ${productRaw}` });
     }
 

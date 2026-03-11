@@ -47,7 +47,7 @@ def index_folder_get_top_level_ids(node):
     )
     if not os.path.isfile(target_path):
         resp = call_route(
-            "/outlook/indexing/get-id-list",
+            "/exchange/outlook/indexing/get-id-list",
             "Fetching folder info...",
             method="POST",
             json_body={"folderId": folder_id},
@@ -62,7 +62,7 @@ def index_folder_get_top_level_ids(node):
         next_link = resp.data.get("nextLink", None)
         while next_link:
             resp = call_route(
-                "/outlook/indexing/get-id-list",
+                "/exchange/outlook/indexing/get-id-list",
                 "Fetching more message IDs...",
                 method="POST",
                 json_body={"folderId": node["id"], "nextLink": next_link},
@@ -97,7 +97,7 @@ def index_folder_sanity_check(node):
         print(colored("Check that previous steps ran correctly.", "red"))
         return False
     folder_metadata = call_route(
-        "/outlook/indexing/get-folder-metadata",
+        "/exchange/outlook/indexing/get-folder-metadata",
         "Fetching folder metadata...",
         method="POST",
         json_body={"folderId": folder_id},
@@ -162,7 +162,7 @@ Try resetting the index and running indexing again.
         for chunk_index, chunk_ids in enumerate(message_ids_chunked):
             print(f"Fetching metadata for chunk {chunk_index+1}/{len(message_ids_chunked)}...")
             metadata_response = call_route(
-                "/outlook/indexing/hydrate-message-metadata",
+                "/exchange/outlook/indexing/hydrate-message-metadata",
                 "Fetching metadata for messages...",
                 method="POST",
                 json_body={"ids": chunk_ids, "includeHeaders": False, "includeEpoch": True},
