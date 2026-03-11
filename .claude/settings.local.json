@@ -4,7 +4,12 @@
       "Bash(git checkout:*)",
       "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm add pino pino-pretty 2>&1)",
       "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm exec tsc --noEmit 2>&1 | head -40)",
-      "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm exec tsc --noEmit 2>&1; echo \"EXIT:$?\")"
+      "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm exec tsc --noEmit 2>&1; echo \"EXIT:$?\")",
+      "Bash(chmod +x /c/Users/micha/Projects/dead-simple-email-downloader/read_env_redacted.sh && bash /c/Users/micha/Projects/dead-simple-email-downloader/read_env_redacted.sh /c/Users/micha/Projects/dead-simple-email-downloader/.env)",
+      "Bash(bash /c/Users/micha/Projects/dead-simple-email-downloader/read_env_redacted.sh /c/Users/micha/Projects/dead-simple-email-downloader/.env)",
+      "Bash(python cli.py --help 2>&1)",
+      "Bash(.venv/Scripts/python cli.py --help 2>&1)",
+      "Bash(.venv/Scripts/python cli.py google --help 2>&1 && .venv/Scripts/python cli.py google gmail --help 2>&1)"
     ]
   }
 }

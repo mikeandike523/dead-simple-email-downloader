@@ -1,21 +1,7 @@
-import os
+from pysrc.helpers.paths import auth_file, index_root, cache_root, debug_root
 
-
-def auth_file(provider: str) -> str:
-    return os.path.join(".dsed", "auth", f"{provider}.json")
-
-
-def index_root(provider: str, product: str) -> str:
-    return os.path.join(".dsed", "indices", provider, product)
-
-
-def cache_root(provider: str, product: str) -> str:
-    return os.path.join(".dsed", "caches", provider, product)
-
-
-def debug_root() -> str:
-    return os.path.join(".dsed", "debug")
-
+__all__ = ["auth_file", "index_root", "cache_root", "debug_root",
+           "EXCHANGE_AUTH", "EXCHANGE_OUTLOOK_INDEX", "EXCHANGE_OUTLOOK_CACHE"]
 
 # Convenience constants for exchange/outlook
 EXCHANGE_AUTH = auth_file("exchange")

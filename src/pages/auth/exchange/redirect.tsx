@@ -56,7 +56,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     const clientId = process.env.AZURE_CLIENT_ID!;
     const clientSecret = process.env.AZURE_CLIENT_SECRET!;
-    const redirectUri = process.env.OAUTH_REDIRECT_URL!;
+    const redirectUri = process.env.AZURE_OAUTH_REDIRECT_URL!;
 
     const form = new URLSearchParams();
     form.set("client_id", clientId);

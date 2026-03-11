@@ -10,7 +10,7 @@ from termcolor import colored
 from pysrc.utils.docker_ports import get_compose_port
 
 # ---------------------------------------------------------------------------
-# New command implementations (exchange/outlook)
+# Command implementations (exchange/outlook)
 # ---------------------------------------------------------------------------
 from pysrc.cli_routes.exchange.outlook.login import impl_exchange_outlook_login
 from pysrc.cli_routes.exchange.outlook.logout import impl_exchange_outlook_logout
@@ -22,6 +22,13 @@ from pysrc.cli_routes.exchange.outlook.output import impl_exchange_outlook_outpu
 from pysrc.cli_routes.exchange.outlook.safe_delete import impl_exchange_outlook_safe_delete
 from pysrc.cli_routes.exchange.outlook.total_emails import impl_exchange_outlook_total_emails
 from pysrc.cli_routes.exchange.outlook.debug_download import impl_exchange_outlook_debug_download
+
+# ---------------------------------------------------------------------------
+# Command implementations (google/gmail)
+# ---------------------------------------------------------------------------
+from pysrc.cli_routes.google.gmail.login import impl_google_gmail_login
+from pysrc.cli_routes.google.gmail.logout import impl_google_gmail_logout
+from pysrc.cli_routes.google.gmail.me import impl_google_gmail_me
 
 # ---------------------------------------------------------------------------
 # CLI root
@@ -150,6 +157,41 @@ def exchange_outlook_safe_delete(
         assume_yes=assume_yes,
         soft=soft,
     )
+
+
+# ---------------------------------------------------------------------------
+# dsed google
+# ---------------------------------------------------------------------------
+
+@cli.group("google")
+def google():
+    """Google Cloud provider."""
+    pass
+
+
+# dsed google gmail
+@google.group("gmail")
+def google_gmail():
+    """Gmail product (Google provider)."""
+    pass
+
+
+@google_gmail.command("login")
+def google_gmail_login():
+    """Authenticate with Google and request Gmail scopes."""
+    return impl_google_gmail_login()
+
+
+@google_gmail.command("logout")
+def google_gmail_logout():
+    """Clear server tokens and local JWT for the Google provider."""
+    return impl_google_gmail_logout()
+
+
+@google_gmail.command("me")
+def google_gmail_me():
+    """Print the authenticated user's Google profile."""
+    return impl_google_gmail_me()
 
 
 # ---------------------------------------------------------------------------

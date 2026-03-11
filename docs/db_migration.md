@@ -63,12 +63,11 @@ Update the OAuth redirect URI in the Azure portal:
 
 1. Go to **App registrations → your app → Authentication**
 2. Under the **Web** platform, find the current redirect URI
-3. Change `…/auth/outlook/redirect` → `…/auth/exchange/redirect`
-   (same host, just the path segment changes)
+3. Set the redirect URI to `…/auth/exchange/redirect`
 4. **Save**
 5. Update your `.env` file:
    ```
-   OAUTH_REDIRECT_URL=http://localhost:3000/auth/exchange/redirect
+   AZURE_OAUTH_REDIRECT_URL=http://localhost:3000/auth/exchange/redirect
    ```
    (adjust to your actual host/port for production)
 

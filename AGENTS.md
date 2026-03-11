@@ -35,4 +35,11 @@ including which code you could or could not verify yourself
 ## Tests
 At this time, we do not have any corpus of mock data that would support unit testing
 So no tests at this time
-This is a small project meant to solve a niche IT issue 
+This is a small project meant to solve a niche IT issue
+
+## Security Rules
+
+Never read an .env file directly. Use ./read_env_redacted.sh. Don't change env files without user permission.
+Suggest to the user what changes to make.
+In very limited cases, a user may give you explict, one time approval to read an env file directly,
+particularly if a lot of sweeping changes need to be made. But unless explicitly approved, do not read or write .env files directly.
