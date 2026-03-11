@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "@/utils/fetchWithTimeout";
 import summarizeResponse, { JsonValue } from "@/utils/summarizeResponse";
 import { PoolConnection } from "mysql2/promise";
+import logger from "./logger";
 import {
   dateToSqlUtcTimestamp,
   sqlUtcTimestampToDate,
@@ -26,7 +27,7 @@ async function getNewAccessToken(
 ) {
   await withTransaction(
     async (txn) => {
-      console.info(`Getting new access token for user ${openidSub} (${provider}/${product})`);
+      logger.info(`Getting new access token for user ${openidSub} (${provider}/${product})`);
 
       const refreshTokensResult = await dbQuery(
         `SELECT refresh_token from oauth_tokens WHERE openid_sub = ? AND provider = ?`,
@@ -386,7 +387,7 @@ export async function callGraphJSON<
   } catch (err) {
     const ensureMs = now() - tEnsureStart;
     if (!silent) {
-      console.info(
+      logger.info(
         `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
           0
         )}ms | fetch=skipped (token ensure failed) | error=${
@@ -440,7 +441,7 @@ export async function callGraphJSON<
         const delayMs = computeBackoffMs(attempt, retryAfterMs);
 
         if (!silent) {
-          console.info(
+          logger.info(
             `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
               0
             )}ms | graphFetch=${fetchMs.toFixed(0)}ms | status=${
@@ -454,7 +455,7 @@ export async function callGraphJSON<
       }
 
       if (!silent) {
-        console.info(
+        logger.info(
           `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
             0
           )}ms | graphFetch=${fetchMs.toFixed(0)}ms`
@@ -470,7 +471,7 @@ export async function callGraphJSON<
       if (attempt < DEFAULT_MAX_ATTEMPTS) {
         const delayMs = computeBackoffMs(attempt, null);
         if (!silent) {
-          console.info(
+          logger.info(
             `[callGraphJSON] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
               0
             )}ms | graphFetch=${fetchMs.toFixed(
@@ -486,7 +487,7 @@ export async function callGraphJSON<
 
       // Out of attempts: rethrow last network error (matches your current behavior)
       if (!silent) {
-        console.info(
+        logger.info(
           `[callGraphJSON] ${method} ${cleanRoute} | retries exhausted | error=${
             (err as Error)?.message ?? err
           }`
@@ -575,7 +576,7 @@ export async function callGraphBinary({
         const delayMs = computeBackoffMs(attempt, retryAfterMs);
 
         if (!silent) {
-          console.info(
+          logger.info(
             `[callGraphBinary] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
               0
             )}ms | graphFetch=${fetchMs.toFixed(0)}ms | status=${
@@ -589,7 +590,7 @@ export async function callGraphBinary({
       }
 
       if (!silent) {
-        console.info(
+        logger.info(
           `[callGraphBinary] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
             0
           )}ms | graphFetch=${fetchMs.toFixed(0)}ms`
@@ -602,7 +603,7 @@ export async function callGraphBinary({
       if (attempt < DEFAULT_MAX_ATTEMPTS) {
         const delayMs = computeBackoffMs(attempt, null);
         if (!silent) {
-          console.info(
+          logger.info(
             `[callGraphBinary] ${method} ${cleanRoute} | ensureAccessToken=${ensureMs.toFixed(
               0
             )}ms | graphFetch=${fetchMs.toFixed(
@@ -617,7 +618,7 @@ export async function callGraphBinary({
       }
 
       if (!silent) {
-        console.info(
+        logger.info(
           `[callGraphBinary] ${method} ${cleanRoute} | retries exhausted | error=${
             (err as Error)?.message ?? err
           }`

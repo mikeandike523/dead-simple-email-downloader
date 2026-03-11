@@ -1,5 +1,13 @@
+import os
+import socket
+import subprocess
+import sys
+import webbrowser
+
 import click
 from termcolor import colored
+
+from pysrc.utils.docker_ports import get_compose_port
 
 # ---------------------------------------------------------------------------
 # New command implementations (exchange/outlook)
@@ -253,6 +261,65 @@ def outlook_safe_delete(
         assume_yes=assume_yes,
         soft=soft,
     )
+
+
+# ---------------------------------------------------------------------------
+# dsed phpmyadmin
+# ---------------------------------------------------------------------------
+
+@cli.command("phpmyadmin")
+def phpmyadmin():
+    """Open phpMyAdmin in a browser (or print its URL when piped)."""
+    port = get_compose_port("phpmyadmin", 80)
+    url = f"http://localhost:{port}"
+    if sys.stdout.isatty():
+        click.echo(url)
+        webbrowser.open(url, new=0)
+    else:
+        sys.stdout.write(url)
+
+
+# ---------------------------------------------------------------------------
+# dsed backend
+# ---------------------------------------------------------------------------
+
+@cli.group("backend")
+def backend():
+    """Backend server management."""
+    pass
+
+
+@backend.command("start")
+def backend_start():
+    """Find a free port and start the Next.js backend (blocking)."""
+    # Find a free port for Next.js
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        next_port = s.getsockname()[1]
+
+    # Persist port so the Python CLI can discover it
+    runtime_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime")
+    os.makedirs(runtime_dir, exist_ok=True)
+    runtime_file = os.path.join(runtime_dir, "next_port.txt")
+    with open(runtime_file, "w", encoding="utf-8") as f:
+        f.write(str(next_port))
+
+    # Discover MySQL host port
+    mysql_port = get_compose_port("db", 3306)
+
+    click.echo(colored(f"Found random open port: {next_port}", "cyan"))
+    click.echo(colored(f"MySQL mapped to host port: {mysql_port}", "cyan"))
+    click.echo(colored(f"Backend listening on http://localhost:{next_port}", "green"))
+
+    env = os.environ.copy()
+    env["PORT"] = str(next_port)
+    env["MYSQL_PORT"] = str(mysql_port)
+
+    try:
+        subprocess.run(["pnpm", "start"], env=env)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

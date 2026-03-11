@@ -7,8 +7,9 @@ from termcolor import colored
 from typing import Any, Dict, Iterable, List, Tuple, Optional, Union
 
 from pysrc.utils.summarize_response import summarize_response
+from pysrc.utils.backend_port import get_backend_port
 
-BASE_URL = "http://localhost:3000"  # change if needed
+BASE_URL = f"http://localhost:{get_backend_port()}"
 JWT_PATH = ".dsed/jwt.json"  # legacy path — kept for backward compat
 
 # Assumes summarize_response(resp: requests.Response) -> object with .ok, .status, .text, .data

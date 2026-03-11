@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm add pino pino-pretty 2>&1)",
+      "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm exec tsc --noEmit 2>&1 | head -40)",
+      "Bash(cd \"C:/Users/micha/Projects/dead-simple-email-downloader\" && pnpm exec tsc --noEmit 2>&1; echo \"EXIT:$?\")"
     ]
   }
 }
