@@ -179,13 +179,17 @@ def backend():
 
 
 @backend.command("start")
-def backend_start():
+@click.option("--port", type=int, default=None, help="Use a fixed port (e.g. 3000 for OAuth redirect URL compatibility).")
+def backend_start(port):
     """Find a free port and start the Next.js backend (blocking)."""
-    # Find a free port for Next.js
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        next_port = s.getsockname()[1]
+    if port is not None:
+        next_port = port
+    else:
+        # Find a free port for Next.js
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            next_port = s.getsockname()[1]
 
     # Persist port so the Python CLI can discover it
     runtime_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime")
@@ -197,7 +201,7 @@ def backend_start():
     # Discover MySQL host port
     mysql_port = get_compose_port("db", 3306)
 
-    click.echo(colored(f"Found random open port: {next_port}", "cyan"))
+    click.echo(colored(f"{'Using fixed port' if port is not None else 'Found random open port'}: {next_port}", "cyan"))
     click.echo(colored(f"MySQL mapped to host port: {mysql_port}", "cyan"))
     click.echo(colored(f"Backend listening on http://localhost:{next_port}", "green"))
 
