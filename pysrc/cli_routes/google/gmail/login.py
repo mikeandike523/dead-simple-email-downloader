@@ -9,10 +9,11 @@ from termcolor import colored
 
 from pysrc.utils.summarize_response import summarize_response
 from pysrc.utils.scope_summary import print_scope_summary
+from pysrc.utils.backend_port import get_backend_port
 
 PROVIDER = "google"
 PRODUCT = "gmail"
-BASE_URL = "http://localhost:3000"
+BASE_URL = f"http://localhost:{get_backend_port()}"
 
 
 def impl_google_gmail_login(for_commands: tuple[str, ...], summarize_scopes: bool):

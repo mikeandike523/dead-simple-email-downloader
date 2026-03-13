@@ -1,39 +1,16 @@
-import json
-import os
-
 import requests
 from termcolor import colored
 
 from pysrc.utils.summarize_response import summarize_response
+from pysrc.utils.backend_port import get_backend_port
+from pysrc.call_route import _load_jwt, _delete_local_jwt
 
 PROVIDER = "google"
-BASE_URL = "http://localhost:3000"
-
-
-def _load_jwt():
-    jwt_path = os.path.join(".dsed", "auth", f"{PROVIDER}.json")
-    if os.path.exists(jwt_path):
-        try:
-            with open(jwt_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("jwt"), jwt_path
-        except Exception:
-            pass
-    return None, None
-
-
-def _delete_local_jwt(jwt_path: str):
-    if not os.path.exists(jwt_path):
-        return False
-    try:
-        os.remove(jwt_path)
-        return True
-    except Exception:
-        return False
+BASE_URL = f"http://localhost:{get_backend_port()}"
 
 
 def impl_google_gmail_logout():
-    jwt, jwt_path = _load_jwt()
+    jwt, jwt_path = _load_jwt(PROVIDER)
     if jwt:
         url = f"{BASE_URL}/api/auth/google/logout"
         headers = {"Authorization": f"Bearer {jwt}"}

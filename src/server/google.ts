@@ -35,12 +35,12 @@ async function getNewAccessToken(
       const body = new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
-        client_id: process.env.GCLOUD_CLIENT_ID!,
-        client_secret: process.env.GCLOUD_CLIENT_SECRET!,
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
       });
 
       const tokenResponse = await summarizeResponse(
-        await fetchWithTimeout(process.env.GCLOUD_TOKEN_URI!, {
+        await fetchWithTimeout("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body,

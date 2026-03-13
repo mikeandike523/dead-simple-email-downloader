@@ -37,10 +37,21 @@ def _flatten_params(params: Dict[str, Any]) -> List[Tuple[str, str]]:
             out.append((k, str(v)))
     return out
 
-def _load_jwt(provider: str = "exchange") -> Optional[str]:
+def _delete_local_jwt(jwt_path: str) -> bool:
+    if not os.path.exists(jwt_path):
+        return False
+    try:
+        os.remove(jwt_path)
+        return True
+    except Exception:
+        return False
+
+
+def _load_jwt(provider: str = "exchange") -> Tuple[Optional[str], Optional[str]]:
     """
     Load the CLI JWT for the given provider.
     Looks in .dsed/auth/<provider>.json first; falls back to legacy .dsed/jwt.json.
+    Returns (jwt_string, jwt_path) or (None, None) if not found.
     """
     new_path = os.path.join(".dsed", "auth", f"{provider}.json")
     legacy_path = JWT_PATH
@@ -53,18 +64,18 @@ def _load_jwt(provider: str = "exchange") -> Optional[str]:
     else:
         print(colored(
             f"JWT not found for provider '{provider}'. "
-            f"Run 'dsed {provider} outlook login' first.",
+            f"Run 'dsed {provider} login' first.",
             "red",
         ))
-        return None
+        return None, None
 
     with open(jwt_path, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
-            return data.get("jwt")
+            return data.get("jwt"), jwt_path
         except Exception:
             print(colored("Failed to read JWT file.", "red"))
-            return None
+            return None, None
 
 def _spinner_line(prompt: str):
     stop = threading.Event()
@@ -102,7 +113,7 @@ def call_route(
     Returns:
         summarize_response(requests.Response)
     """
-    jwt = _load_jwt(provider)
+    jwt, _ = _load_jwt(provider)
     if not jwt:
         return None
 

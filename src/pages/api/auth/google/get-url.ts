@@ -20,9 +20,9 @@ export default async function handler(
       return res.status(400).json({ error: `Unknown product: ${productRaw}` });
     }
 
-    const clientId = process.env.GCLOUD_CLIENT_ID!;
-    const authUri = process.env.GCLOUD_AUTH_URI!;
-    const redirectUri = process.env.GCLOUD_REDIRECT_URI!;
+    const clientId = process.env.GOOGLE_CLIENT_ID!;
+    const authUri = "https://accounts.google.com/o/oauth2/v2/auth";
+    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URL!;
     const nonce = randomString(16);
     const pollToken = uuidv4();
 

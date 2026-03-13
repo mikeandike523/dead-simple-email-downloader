@@ -4,7 +4,7 @@ import { dbExec, dbQuery } from "@/server/db";
 import { decodeJwt } from "jose";
 import { verifyState } from "@/server/oidc-state";
 
-const tokenEndpoint = process.env.GCLOUD_TOKEN_URI!;
+const tokenEndpoint = "https://oauth2.googleapis.com/token";
 
 type Props = {
   ok: boolean;
@@ -53,9 +53,9 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       };
     }
 
-    const clientId = process.env.GCLOUD_CLIENT_ID!;
-    const clientSecret = process.env.GCLOUD_CLIENT_SECRET!;
-    const redirectUri = process.env.GCLOUD_REDIRECT_URI!;
+    const clientId = process.env.GOOGLE_CLIENT_ID!;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
+    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URL!;
 
     const form = new URLSearchParams();
     form.set("client_id", clientId);
