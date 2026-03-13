@@ -1,4 +1,5 @@
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -308,8 +309,13 @@ def backend_start(port):
     env["PORT"] = str(next_port)
     env["MYSQL_PORT"] = str(mysql_port)
 
+    pnpm = shutil.which("pnpm")
+    if not pnpm:
+        click.echo(colored("Error: pnpm not found on PATH.", "red"))
+        sys.exit(1)
+
     try:
-        subprocess.run(["pnpm", "start"], env=env)
+        subprocess.run([pnpm, "start"], env=env)
     except KeyboardInterrupt:
         pass
 
