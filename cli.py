@@ -315,7 +315,7 @@ def backend_start(port):
         sys.exit(1)
 
     try:
-        subprocess.run([pnpm, "start"], env=env)
+        subprocess.run([pnpm, "start"], env=env, cwd=os.path.dirname(__file__))
     except KeyboardInterrupt:
         pass
 
