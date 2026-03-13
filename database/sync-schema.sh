@@ -35,16 +35,26 @@ need_cmd python
 [[ -f ".env" ]] || die "Missing .env in current directory"
 set -a
 # shellcheck disable=SC1091
-source .env
+source "./.env"
 set +a
 
 : "${MYSQL_HOST:?MYSQL_HOST not set in .env}"
-: "${MYSQL_PORT:?MYSQL_PORT not set in .env}"
 : "${MYSQL_USER:?MYSQL_USER not set in .env}"
 : "${MYSQL_PASSWORD:?MYSQL_PASSWORD not set in .env}"
 : "${MYSQL_DATABASE:?MYSQL_DATABASE not set in .env}"
 
 [[ -f "schema.sql" ]] || die "Missing schema.sql in current directory"
+
+# Detect MySQL host port dynamically if MYSQL_PORT is not set.
+if [[ -z "${MYSQL_PORT:-}" ]]; then
+  COMPOSE_FILE="$(dirname "$0")/docker-compose.yml"
+  RAW_PORT="$(docker compose -f "${COMPOSE_FILE}" port db 3306 2>/dev/null \
+    || docker-compose -f "${COMPOSE_FILE}" port db 3306 2>/dev/null)" \
+    || die "Could not detect MySQL port via 'docker compose port db 3306'. Is the container running?"
+  MYSQL_PORT="${RAW_PORT##*:}"
+  [[ -n "${MYSQL_PORT}" ]] || die "Failed to parse port from docker compose output: '${RAW_PORT}'"
+  echo "==> Detected MySQL host port: ${MYSQL_PORT}"
+fi
 
 # Build a BASE URL (no database in the path) and bind the DB via --schema.
 PW_ENC="$(urlencode "${MYSQL_PASSWORD}")"
