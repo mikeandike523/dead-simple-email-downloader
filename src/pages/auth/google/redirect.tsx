@@ -3,6 +3,7 @@ import React, { useEffect } from "react";
 import { dbExec, dbQuery } from "@/server/db";
 import { decodeJwt } from "jose";
 import { verifyState } from "@/server/oidc-state";
+import { getErrorMessage } from "@/utils/errors";
 
 const tokenEndpoint = "https://oauth2.googleapis.com/token";
 
@@ -132,8 +133,8 @@ UPDATE pending_logins
         msg: `Login complete (${provider}/${product}). You may close this window and return to your CLI.`,
       },
     };
-  } catch (e: any) {
-    return { props: { ok: false, msg: e?.message ?? "Unexpected error" } };
+  } catch (e: unknown) {
+    return { props: { ok: false, msg: getErrorMessage(e) || "Unexpected error" } };
   }
 };
 

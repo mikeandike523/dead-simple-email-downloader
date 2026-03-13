@@ -4,6 +4,7 @@ import { NextApiResponse } from "next";
 
 import { AuthedNextApiRequest, withAuth } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 type RouteBody = {
   folderId: string;
@@ -78,10 +79,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
         childFolderCount,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res.status(502).json({
       error: "Failed to retrieve folder metadata",
-      detail: String(err?.message || err),
+      detail: getErrorMessage(err),
     });
   }
 };

@@ -3,7 +3,7 @@ import { SignJWT } from "jose";
 import ms, {StringValue} from "ms"; // or implement your own simple parser; or accept seconds
 
 export async function sign(
-  claims: Record<string, any>,
+  claims: Record<string, unknown>,
   expiresIn: string | number
 ): Promise<string> {
   const secret = new TextEncoder().encode(process.env.CLI_JWT_SECRET!);

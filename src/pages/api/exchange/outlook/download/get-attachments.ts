@@ -2,6 +2,7 @@ import { withAuth } from "@/server/withAuth";
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 type GraphListResponse<T> = {
   value?: T[];
@@ -52,10 +53,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     );
 
     return res.status(200).json({ attachments });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res
       .status(502)
-      .json({ error: "Failed to fetch attachments", detail: String(err?.message || err) });
+      .json({ error: "Failed to fetch attachments", detail: getErrorMessage(err) });
   }
 };
 

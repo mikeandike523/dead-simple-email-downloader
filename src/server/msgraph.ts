@@ -419,7 +419,7 @@ export async function callGraphJSON<
   };
 
   if (body !== undefined && method !== "GET" && method !== "DELETE") {
-    (initBase as any).body = JSON.stringify(body);
+    initBase.body = JSON.stringify(body);
   }
 
   // --- fetch + retry (429/503 with Retry-After) -----------------------------

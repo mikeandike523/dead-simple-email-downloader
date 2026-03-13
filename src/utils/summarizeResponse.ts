@@ -80,7 +80,7 @@ type ProblemJson = {
   status?: number;
   detail?: string;
   instance?: string;
-  error?: { code?: string; message?: string; innerError?: any } | string;
+  error?: { code?: string; message?: string; innerError?: unknown } | string;
 };
 
 function tryProblemCode(d: JsonValue | undefined): string | undefined {
@@ -88,7 +88,7 @@ function tryProblemCode(d: JsonValue | undefined): string | undefined {
   const pj = d as ProblemJson;
   if (typeof pj.error === "string") return pj.error;
   if (pj.error && typeof pj.error === "object" && "code" in pj.error) {
-    const code = (pj.error as any).code;
+    const code = (pj.error as { code?: unknown }).code;
     return typeof code === "string" ? code : undefined;
   }
   return undefined;
@@ -177,7 +177,7 @@ export class ResponseSummary<
       has_response_body: hasBody,
       text,
       data: data as T,
-      url: (resp as any).url, // fetch Response usually exposes url
+      url: resp.url,
       contentType,
       problemCode: tryProblemCode(data),
     });

@@ -4,6 +4,7 @@ import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
 import safeFilename from "@/utils/safeFilename";
+import { getErrorMessage } from "@/utils/errors";
 
 /** ──────────────────────────────────────────────────────────────
  * Types (response shape)
@@ -151,10 +152,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     const forest = buildFolderForest(folders);
 
     return res.status(200).json(forest);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res
       .status(502)
-      .json({ error: "Failed to enumerate folders", detail: String(err?.message || err) });
+      .json({ error: "Failed to enumerate folders", detail: getErrorMessage(err) });
   }
 };
 

@@ -2,6 +2,7 @@ import { withAuth } from "@/server/withAuth";
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
 import { callGraphBinary } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
   try {
@@ -41,10 +42,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       graphRes.headers.get("Content-Type") || "application/octet-stream";
     res.setHeader("Content-Type", contentType);
     return res.status(200).send(buf);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res
       .status(500)
-      .json({ error: "Server error", detail: String(err?.message || err) });
+      .json({ error: "Server error", detail: getErrorMessage(err) });
   }
 };
 

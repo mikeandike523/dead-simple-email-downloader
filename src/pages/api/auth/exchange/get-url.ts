@@ -3,6 +3,7 @@ import { randomString, signState } from "@/server/oidc-state";
 import { v4 as uuidv4 } from "uuid";
 import { dbExec } from "@/server/db";
 import { resolveScopes, type Product } from "@/server/scopes";
+import { getErrorMessage } from "@/utils/errors";
 
 const PROVIDER = "exchange";
 const tenant = process.env.AZURE_TENANT || "common";
@@ -51,7 +52,7 @@ export default async function handler(
     );
 
     res.status(200).json({ pollToken, url: url.toString() });
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message ?? "internal_error" });
+  } catch (e: unknown) {
+    res.status(500).json({ error: getErrorMessage(e) || "internal_error" });
   }
 }

@@ -32,7 +32,7 @@ export function verifyState(signed: string, maxAgeSec = 600) {
   return parsed; // { n, ts, pt, pr?, pd? }
 }
 
-export function decodeJwtPayload<T = any>(jwt: string): T {
+export function decodeJwtPayload<T = unknown>(jwt: string): T {
   const parts = jwt.split(".");
   if (parts.length < 2) throw new Error("bad jwt");
   const body = parts[1].replace(/-/g, "+").replace(/_/g, "/");

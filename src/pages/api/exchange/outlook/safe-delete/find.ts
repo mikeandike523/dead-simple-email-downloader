@@ -3,6 +3,7 @@ import { NextApiResponse } from "next";
 import { AuthedNextApiRequest, withAuth } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
 import { ResponseSummary } from "@/utils/summarizeResponse";
+import { getErrorMessage } from "@/utils/errors";
 
 type RouteBody = {
   exactSender: string;
@@ -79,10 +80,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     if (subjectIsRegex) {
       try {
         subjectRegex = new RegExp(exactSubject, caseSensitive ? "" : "i");
-      } catch (err: any) {
+      } catch (err: unknown) {
         return res.status(400).json({
           error: "Invalid subject regex",
-          detail: String(err?.message || err),
+          detail: getErrorMessage(err),
         });
       }
     }
@@ -191,10 +192,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       matches,
       count: matches.length,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res.status(502).json({
       error: "Failed to find matching messages.",
-      detail: String(err?.message || err),
+      detail: getErrorMessage(err),
     });
   }
 };

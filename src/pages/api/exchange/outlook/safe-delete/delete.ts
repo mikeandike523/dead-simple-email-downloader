@@ -2,6 +2,7 @@ import { NextApiResponse } from "next";
 
 import { AuthedNextApiRequest, withAuth } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 type RouteBody = {
   messageIds: string[];
@@ -67,10 +68,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       deletedIds,
       failed,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res.status(502).json({
       error: "Failed to delete messages.",
-      detail: String(err?.message || err),
+      detail: getErrorMessage(err),
     });
   }
 };

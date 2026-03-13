@@ -1,6 +1,7 @@
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest, withAuth } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 const MAX_BATCH_SIZE = 20; // Graph $batch max requests. :contentReference[oaicite:4]{index=4}
 const TIMEOUT_MILLIS = 2000;
@@ -81,7 +82,7 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
           id: string;
           status: number;
           headers?: Record<string, string>;
-          body?: any;
+          body?: Record<string, unknown>;
         }>;
       }>({
         route: "/$batch",
@@ -121,11 +122,11 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     }
 
     return res.status(200).json({ messages: all });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // If you want to expose throttling, you could check for 429 in callGraphJSON and include retry-after
     return res.status(502).json({
       error: "Failed to hydrate message metadata.",
-      detail: String(err?.message || err),
+      detail: getErrorMessage(err),
     });
   }
 };

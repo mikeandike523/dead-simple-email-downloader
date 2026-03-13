@@ -3,6 +3,7 @@ import React, { useEffect } from "react";
 import { dbExec, dbQuery } from "@/server/db";
 import { decodeJwt } from "jose";
 import { verifyState } from "@/server/oidc-state";
+import { getErrorMessage } from "@/utils/errors";
 
 const tenant = process.env.AZURE_TENANT || "common";
 const tokenEndpoint = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
@@ -134,8 +135,8 @@ UPDATE pending_logins
         msg: `Login complete (${provider}/${product}). You may close this window and return to your CLI.`,
       },
     };
-  } catch (e: any) {
-    return { props: { ok: false, msg: e?.message ?? "Unexpected error" } };
+  } catch (e: unknown) {
+    return { props: { ok: false, msg: getErrorMessage(e) || "Unexpected error" } };
   }
 };
 

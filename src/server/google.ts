@@ -271,7 +271,7 @@ export async function callGoogleJSON<
 
   const initBase: RequestInit = { method, headers: baseHeaders };
   if (body !== undefined && method !== "GET" && method !== "DELETE") {
-    (initBase as any).body = JSON.stringify(body);
+    initBase.body = JSON.stringify(body);
   }
 
   let attempt = 0;

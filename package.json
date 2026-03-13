@@ -22,7 +22,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "style-props-html": "^0.0.8",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

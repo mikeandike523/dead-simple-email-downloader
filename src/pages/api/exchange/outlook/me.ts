@@ -2,43 +2,67 @@ import { withAuth } from "@/server/withAuth";
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
 import { callGraphJSON, getCurrentAccessToken } from "@/server/msgraph";
-import { AuthUser } from "@/server/auth";
 import lodash from "lodash";
 import { decodeJwt } from "jose";
+import { z } from "zod";
 
 /** ──────────────────────────────────────────────────────────────
- * Types
+ * Zod schemas (parse + validate raw Graph responses)
  * ──────────────────────────────────────────────────────────────*/
 
-export interface GraphUserInfo {
-  userPrincipalName: string;
-  displayName: string;
-  givenName?: string;
-  surname?: string;
-  preferredLanguage?: string;
-  mail?: string;
-  mobilePhone?: string | null;
-  jobTitle?: string | null;
-  officeLocation?: string | null;
-  businessPhones: string[];
-}
+const GraphUserSchema = z.object({
+  userPrincipalName: z.string(),
+  displayName: z.string(),
+  givenName: z.string().optional(),
+  surname: z.string().optional(),
+  preferredLanguage: z.string().optional(),
+  mail: z.string().nullable().optional(),
+  mobilePhone: z.string().nullable().optional(),
+  jobTitle: z.string().nullable().optional(),
+  officeLocation: z.string().nullable().optional(),
+  businessPhones: z.array(z.string()).default([]),
+  proxyAddresses: z.array(z.string()).default([]),
+  otherMails: z.array(z.string()).default([]),
+  mailNickname: z.string().nullable().optional(),
+});
 
-export interface MailboxSettings {
-  timeZone?: string;
-  language?: { locale?: string; displayName?: string };
-  workingHours?: unknown; // shape varies; keep as unknown unless you need full typing
-  automaticRepliesSetting?: unknown; // same here
-  userPurpose?: string; // e.g. "user", "shared", "room", etc.
-}
+const MailboxSettingsSchema = z.object({
+  timeZone: z.string().optional(),
+  language: z.object({
+    locale: z.string().optional(),
+    displayName: z.string().optional(),
+  }).optional(),
+  workingHours: z.unknown().optional(),
+  automaticRepliesSetting: z.unknown().optional(),
+  userPurpose: z.string().optional(),
+});
+
+const AccessTokenClaimsSchema = z.object({
+  scp: z.string().optional(),
+  roles: z.array(z.unknown()).optional(),
+  aud: z.string().optional(),
+  appid: z.string().optional(),
+  tid: z.string().optional(),
+  oid: z.string().optional(),
+  iss: z.string().optional(),
+  ver: z.string().optional(),
+  exp: z.number().optional(),
+});
+
+/** ──────────────────────────────────────────────────────────────
+ * Output types (inferred from schemas where possible)
+ * ──────────────────────────────────────────────────────────────*/
+
+export type GraphUserInfo = z.infer<typeof GraphUserSchema>;
+export type MailboxSettings = z.infer<typeof MailboxSettingsSchema>;
 
 export interface MailIdentity {
-  /** Sign-in identity and addresses */
-  upn: string; // userPrincipalName
-  primarySmtp?: string | null; // derived from proxyAddresses ("SMTP:")
-  mail?: string | null; // Graph "mail" (primary SMTP as reported)
-  aliases: string[]; // secondary smtp: addresses (lowercase)
-  otherMails: string[]; // non-alias or extra emails
-  mailNickname?: string | null;
+  upn: string;
+  primarySmtp: string | null;
+  mail: string | null;
+  aliases: string[];
+  otherMails: string[];
+  mailNickname: string | null;
 }
 
 export interface GraphUserInfoExtended extends GraphUserInfo {
@@ -57,80 +81,43 @@ export interface GraphUserInfoExtended extends GraphUserInfo {
   };
 }
 
-/** Raw Graph response type (very loose) */
-type RawGraphUser = Record<string, any>;
-type RawMailboxSettings = Record<string, any>;
-
 /** ──────────────────────────────────────────────────────────────
- * Mappers
+ * Helpers
  * ──────────────────────────────────────────────────────────────*/
 
-function parseProxyAddresses(raw: any): {
+function parseProxyAddresses(proxyAddresses: string[]): {
   primarySmtp: string | null;
   aliases: string[];
 } {
-  const list = Array.isArray(raw) ? raw : [];
-  let primary: string | null = null;
+  let primarySmtp: string | null = null;
   const aliases: string[] = [];
-
-  for (const addr of list) {
-    if (typeof addr !== "string") continue;
-    // Graph returns "SMTP:primary@contoso.com" | "smtp:alias@contoso.com"
-    if (addr.startsWith("SMTP:")) {
-      primary = addr.slice(5);
-    } else if (addr.startsWith("smtp:")) {
-      aliases.push(addr.slice(5));
-    }
+  for (const addr of proxyAddresses) {
+    if (addr.startsWith("SMTP:")) primarySmtp = addr.slice(5);
+    else if (addr.startsWith("smtp:")) aliases.push(addr.slice(5));
   }
-  return { primarySmtp: primary, aliases };
+  return { primarySmtp, aliases };
 }
 
-/** Keep your original mapper for general profile fields */
-export function mapGraphUserInfo(raw: RawGraphUser): GraphUserInfo {
+function buildMailIdentity(user: z.infer<typeof GraphUserSchema>): MailIdentity {
+  const { primarySmtp, aliases } = parseProxyAddresses(user.proxyAddresses);
   return {
-    userPrincipalName: raw.userPrincipalName,
-    displayName: raw.displayName,
-    givenName: raw.givenName,
-    surname: raw.surname,
-    preferredLanguage: raw.preferredLanguage,
-    mail: raw.mail,
-    mobilePhone: raw.mobilePhone ?? null,
-    jobTitle: raw.jobTitle ?? null,
-    officeLocation: raw.officeLocation ?? null,
-    businessPhones: Array.isArray(raw.businessPhones) ? raw.businessPhones : [],
-  };
-}
-
-/** New: build the mailIdentity block */
-function mapMailIdentity(raw: RawGraphUser): MailIdentity {
-  const { primarySmtp, aliases } = parseProxyAddresses(raw.proxyAddresses);
-  return {
-    upn: raw.userPrincipalName,
+    upn: user.userPrincipalName,
     primarySmtp,
-    mail: raw.mail ?? null,
+    mail: user.mail ?? null,
     aliases,
-    otherMails: Array.isArray(raw.otherMails) ? raw.otherMails : [],
-    mailNickname: raw.mailNickname ?? null,
+    otherMails: user.otherMails,
+    mailNickname: user.mailNickname ?? null,
   };
 }
 
-function mapMailboxSettings(raw: RawMailboxSettings): MailboxSettings {
-  if (!raw || typeof raw !== "object") return {};
-  const {
-    timeZone,
-    language,
-    workingHours,
-    automaticRepliesSetting,
-    userPurpose,
-  } = raw;
-  return {
-    timeZone,
-    language,
-    workingHours,
-    automaticRepliesSetting,
-    userPurpose,
-  };
-}
+const EMPTY_MAIL_IDENTITY: MailIdentity = {
+  upn: "",
+  primarySmtp: null,
+  mail: null,
+  aliases: [],
+  otherMails: [],
+  mailNickname: null,
+};
 
 /** ──────────────────────────────────────────────────────────────
  * Handler
@@ -139,79 +126,57 @@ function mapMailboxSettings(raw: RawMailboxSettings): MailboxSettings {
 const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
   const openidSub = req.user.sub;
 
-  // 1) Pull user with all the mail-identity fields we care about.
-  //    No extra scope needed beyond User.Read.
   const meSelect =
     "userPrincipalName,displayName,givenName,surname,preferredLanguage,mail," +
     "mobilePhone,jobTitle,officeLocation,businessPhones," +
-    // mail identity fields:
     "proxyAddresses,otherMails,mailNickname";
 
-  const meResult = await callGraphJSON({
-    openidSub,
-    route: `me?$select=${encodeURIComponent(meSelect)}`,
-  });
+  const [meResult, mbsResult] = await Promise.all([
+    callGraphJSON({ openidSub, route: `me?$select=${encodeURIComponent(meSelect)}` }),
+    callGraphJSON({ openidSub, route: "me/mailboxSettings" }),
+  ]);
 
-  // 2) Optionally pull mailboxSettings (requires MailboxSettings.Read).
-  const mbsResult = await callGraphJSON({
-    openidSub,
-    route: "me/mailboxSettings",
-  });
-
-  const accessToken = await getCurrentAccessToken(openidSub);
-  let graphAccessToken: GraphUserInfoExtended["graphAccessToken"] | undefined;
-  if (accessToken) {
-    try {
-      const claims = decodeJwt(accessToken) as Record<string, any>;
-      const scp = typeof claims.scp === "string" ? claims.scp : "";
-      const roles = Array.isArray(claims.roles) ? claims.roles : [];
-      const exp = typeof claims.exp === "number" ? claims.exp : null;
-      graphAccessToken = {
-        scopes: scp ? scp.split(" ").filter(Boolean) : [],
-        roles: roles.map(String),
-        aud: typeof claims.aud === "string" ? claims.aud : undefined,
-        appid: typeof claims.appid === "string" ? claims.appid : undefined,
-        tid: typeof claims.tid === "string" ? claims.tid : undefined,
-        oid: typeof claims.oid === "string" ? claims.oid : undefined,
-        iss: typeof claims.iss === "string" ? claims.iss : undefined,
-        version: typeof claims.ver === "string" ? claims.ver : undefined,
-        expiresAtUtc:
-          exp !== null ? new Date(exp * 1000).toISOString() : undefined,
-      };
-    } catch {
-      graphAccessToken = undefined;
-    }
-  }
-
-  // Start with auth claims you already expose
-  const result: Partial<AuthUser & GraphUserInfoExtended> = {
+  const result: Partial<GraphUserInfoExtended> & { sub: string } = {
     ...lodash.pick(req.user, ["sub"]),
   };
 
-  if (meResult.ok && meResult.data && typeof meResult.data === "object") {
-    const user = meResult.data as RawGraphUser;
-    Object.assign(result, mapGraphUserInfo(user));
-    (result as GraphUserInfoExtended).mailIdentity = mapMailIdentity(user);
+  // Parse /me response with Zod
+  const userParsed = GraphUserSchema.safeParse(meResult.data);
+  if (userParsed.success) {
+    Object.assign(result, userParsed.data);
+    result.mailIdentity = buildMailIdentity(userParsed.data);
   } else {
-    // Ensure the shape exists even if /me fails for some reason
-    (result as any).mailIdentity = {
-      upn: "",
-      primarySmtp: null,
-      mail: null,
-      aliases: [],
-      otherMails: [],
-      mailNickname: null,
-    } as MailIdentity;
+    result.mailIdentity = EMPTY_MAIL_IDENTITY;
   }
 
-  if (mbsResult.ok && mbsResult.data && typeof mbsResult.data === "object") {
-    (result as GraphUserInfoExtended).mailboxSettings = mapMailboxSettings(
-      mbsResult.data as RawMailboxSettings
-    );
+  // Parse mailboxSettings with Zod
+  const mbsParsed = MailboxSettingsSchema.safeParse(mbsResult.data);
+  if (mbsParsed.success) {
+    result.mailboxSettings = mbsParsed.data;
   }
 
-  if (graphAccessToken) {
-    (result as GraphUserInfoExtended).graphAccessToken = graphAccessToken;
+  // Parse access token claims with Zod
+  const accessToken = await getCurrentAccessToken(openidSub);
+  if (accessToken) {
+    try {
+      const claimsParsed = AccessTokenClaimsSchema.safeParse(decodeJwt(accessToken));
+      if (claimsParsed.success) {
+        const c = claimsParsed.data;
+        result.graphAccessToken = {
+          scopes: c.scp ? c.scp.split(" ").filter(Boolean) : [],
+          roles: (c.roles ?? []).map(String),
+          aud: c.aud,
+          appid: c.appid,
+          tid: c.tid,
+          oid: c.oid,
+          iss: c.iss,
+          version: c.ver,
+          expiresAtUtc: c.exp !== undefined ? new Date(c.exp * 1000).toISOString() : undefined,
+        };
+      }
+    } catch {
+      // malformed token — skip access token info
+    }
   }
 
   return res.status(200).json(result);

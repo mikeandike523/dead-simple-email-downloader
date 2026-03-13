@@ -2,6 +2,7 @@ import { NextApiResponse } from "next";
 
 import { AuthedNextApiRequest, withAuth } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 type RouteBody = {
   folderId: string;
@@ -62,10 +63,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
       nextLink,
       deltaLink,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res.status(502).json({
       error: "Failed to get message id list.",
-      detail: String(err?.message || err),
+      detail: getErrorMessage(err),
     });
   }
 };

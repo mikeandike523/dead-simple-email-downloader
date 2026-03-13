@@ -38,7 +38,6 @@ export interface ExecResult {
 declare global {
   // Keep a single pool alive during Next.js dev HMR.
   // In production this assignment is harmless.
-  // eslint-disable-next-line no-var
   var _mysqlPool: mysql.Pool | undefined;
 }
 
@@ -87,7 +86,9 @@ const ER_LOCK_DEADLOCK = 1213;
 const ER_LOCK_WAIT_TIMEOUT = 1205;
 
 function isRetryableTxError(err: unknown): boolean {
-  const code = typeof err === 'object' && err && (err as any).errno;
+  const code = typeof err === 'object' && err !== null && 'errno' in err
+    ? (err as { errno?: unknown }).errno
+    : undefined;
   return code === ER_LOCK_DEADLOCK || code === ER_LOCK_WAIT_TIMEOUT;
 }
 

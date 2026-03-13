@@ -2,6 +2,7 @@ import { withAuth } from "@/server/withAuth";
 import { NextApiResponse } from "next";
 import { AuthedNextApiRequest } from "@/server/withAuth";
 import { callGraphJSON } from "@/server/msgraph";
+import { getErrorMessage } from "@/utils/errors";
 
 const MESSAGE_SELECT_FIELDS = [
   "id",
@@ -46,10 +47,10 @@ const handler = async (req: AuthedNextApiRequest, res: NextApiResponse) => {
     }
 
     return res.status(200).json(graphResult.data);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return res
       .status(500)
-      .json({ error: "Server error", detail: String(err?.message || err) });
+      .json({ error: "Server error", detail: getErrorMessage(err) });
   }
 };
 
