@@ -2,3 +2,5 @@ click
 requests
 termcolor
 tqdm
+textual
+textual-dev
