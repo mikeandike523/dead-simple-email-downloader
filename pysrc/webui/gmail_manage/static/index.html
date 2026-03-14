@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dsed · Gmail Manage</title>
+  <!-- no-cache so reloads always get the latest build -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Top bar ──────────────────────────────────────────────── -->
+    <header id="topbar">
+      <span id="topbar-title">dsed · Gmail Manage</span>
+      <span id="topbar-conn" class="conn-dot connecting" title="connecting…">●</span>
+    </header>
+
+    <!-- ── Main area ────────────────────────────────────────────── -->
+    <div id="main">
+
+      <!-- email pane (left, 2/3) -->
+      <section id="email-pane">
+        <div id="email-content" class="pane-inner">
+          <p class="dim">Connecting…</p>
+        </div>
+      </section>
+
+      <!-- sidebar (right, 1/3) -->
+      <aside id="sidebar">
+        <div id="sidebar-content" class="pane-inner">
+          <p class="dim">Loading…</p>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- ── Bottom bar ───────────────────────────────────────────── -->
+    <footer id="bottom">
+      <div id="help-bar">
+        <span class="dim">Commands:&nbsp;</span>
+        <span class="cmd-hint cyan">cat &lt;category&gt;</span>
+        <span class="dim">&nbsp;·&nbsp;</span>
+        <span class="cmd-hint red">hard-delete</span>
+        <span class="dim">&nbsp;·&nbsp;</span>
+        <span class="cmd-hint yellow">soft-delete</span>
+        <span class="dim">&nbsp;·&nbsp;</span>
+        <span class="cmd-hint blue">move &lt;label&gt;</span>
+        <span class="dim">&nbsp;·&nbsp;Combine: cat &lt;category&gt; hard-delete&nbsp;|&nbsp;cat &lt;category&gt; move &lt;label&gt;&nbsp;·&nbsp;Empty = skip</span>
+      </div>
+      <div id="status-bar"><span id="status-text" class="dim"></span></div>
+      <div id="input-row">
+        <span id="prompt">&gt;</span>
+        <input id="cmd-input" type="text" autocomplete="off" autocorrect="off"
+               spellcheck="false" placeholder="enter command…" />
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

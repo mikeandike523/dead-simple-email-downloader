@@ -12,7 +12,12 @@
       "Bash(.venv/Scripts/python cli.py google --help 2>&1 && .venv/Scripts/python cli.py google gmail --help 2>&1)",
       "Bash(.venv/Scripts/python cli.py google gmail login --help 2>&1)",
       "Bash(.venv/Scripts/python cli.py google gmail --help 2>&1)",
-      "Bash(mkdir -p /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/exchange/outlook && cp -r /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/outlook/* /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/exchange/outlook/ && rm -rf /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/outlook && echo \"done\")"
+      "Bash(mkdir -p /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/exchange/outlook && cp -r /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/outlook/* /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/exchange/outlook/ && rm -rf /c/Users/micha/Projects/dead-simple-email-downloader/src/pages/api/outlook && echo \"done\")",
+      "Bash(find:*)",
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(ls:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python -c \"from pysrc.webui.gmail_manage.server import run_server; print\\('import OK'\\)\")"
     ]
   }
 }

@@ -4,3 +4,5 @@ termcolor
 tqdm
 textual
 textual-dev
+flask
+flask-socketio
