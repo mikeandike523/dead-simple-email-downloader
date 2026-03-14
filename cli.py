@@ -39,6 +39,7 @@ from pysrc.cli_routes.google.gmail.login import impl_google_gmail_login
 from pysrc.cli_routes.google.gmail.logout import impl_google_gmail_logout
 from pysrc.cli_routes.google.gmail.me import impl_google_gmail_me
 from pysrc.cli_routes.google.gmail.folders import impl_google_gmail_folders
+from pysrc.cli_routes.google.gmail.manage import impl_google_gmail_manage
 
 # ---------------------------------------------------------------------------
 # CLI root
@@ -250,6 +251,42 @@ def google_gmail_me():
 def google_gmail_folders():
     """List Gmail labels with total, unread, and read message counts."""
     return impl_google_gmail_folders()
+
+
+@google_gmail.command("manage")
+@click.option(
+    "--force-label-case",
+    "force_label_case",
+    is_flag=True,
+    default=False,
+    help="Require exact label casing instead of case-insensitive matching.",
+)
+def google_gmail_manage(force_label_case):
+    """Open the interactive inbox triage TUI.
+
+    Triage emails one at a time: categorize for ML training, skip, move,
+    or delete.  Requires login with -c manage scope:
+
+    \b
+      dsed google gmail login -c manage
+      dsed google gmail manage
+
+    Commands inside the TUI:
+
+    \b
+      cat <category>                  assign a category, advance
+      hard-delete                     permanently delete, advance
+      soft-delete                     move to Trash, advance
+      move <label>                    move to Gmail label, advance
+      cat <category> hard-delete      assign + delete
+      cat <category> soft-delete      assign + trash
+      cat <category> move <label>     assign + move
+      (empty) / skip                  skip, advance
+
+    If a label typed in move commands is ambiguous due to case conflicts,
+    re-run with --force-label-case to require exact casing.
+    """
+    return impl_google_gmail_manage(force_label_case=force_label_case)
 
 
 # ---------------------------------------------------------------------------
