@@ -2,7 +2,6 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { randomString, signState } from "@/server/oidc-state";
 import { v4 as uuidv4 } from "uuid";
 import { dbExec } from "@/server/db";
-import { resolveScopes, type Product } from "@/server/scopes";
 import { getErrorMessage } from "@/utils/errors";
 
 const PROVIDER = "exchange";
@@ -15,12 +14,11 @@ export default async function handler(
 ) {
   try {
     const productRaw = typeof req.query.product === "string" ? req.query.product : "outlook";
-    const commandsRaw = typeof req.query.commands === "string" ? req.query.commands : "";
-    const commands = commandsRaw ? commandsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const scopesRaw = typeof req.query.scopes === "string" ? req.query.scopes : "";
+    const scopes = scopesRaw.split(" ").map((s) => s.trim()).filter(Boolean);
 
-    const scopes = resolveScopes(PROVIDER, productRaw as Product, commands);
     if (scopes.length === 0) {
-      return res.status(400).json({ error: `Unknown product: ${productRaw}` });
+      return res.status(400).json({ error: "scopes query param is required" });
     }
 
     const clientId = process.env.AZURE_CLIENT_ID!;

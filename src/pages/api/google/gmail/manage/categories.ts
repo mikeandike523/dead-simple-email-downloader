@@ -1,13 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import type { RowDataPacket } from "mysql2/promise";
 import { getAuth } from "@/server/auth";
 import { dbExec, dbQuery } from "@/server/db";
+
+type CategoryRow = RowDataPacket & { id: number; name: string };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuth(req);
   if (!user) return res.status(401).json({ error: "unauthorized" });
 
   if (req.method === "GET") {
-    const rows = await dbQuery<{ id: number; name: string }>(
+    const rows = await dbQuery<CategoryRow>(
       "SELECT id, name FROM email_categories ORDER BY name ASC"
     );
     return res.status(200).json({ categories: rows });
@@ -23,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "name cannot be empty" });
     }
 
-    const existing = await dbQuery<{ id: number; name: string }>(
+    const existing = await dbQuery<CategoryRow>(
       "SELECT id, name FROM email_categories WHERE name = ?",
       [normalized]
     );
