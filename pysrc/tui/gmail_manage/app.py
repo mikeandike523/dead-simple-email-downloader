@@ -55,6 +55,13 @@ def _find_conflicts(labels: list[dict]) -> list[tuple[str, str]]:
     return conflicts
 
 
+def _strip_quotes(s: str) -> str:
+    """Remove a matching pair of surrounding single or double quotes."""
+    if len(s) >= 2 and s[0] in ('"', "'") and s[-1] == s[0]:
+        return s[1:-1]
+    return s
+
+
 def _resolve_label(name: str, labels: list[dict], force_case: bool) -> dict | str:
     """Return matching label dict, or an error string."""
     if force_case:
@@ -63,8 +70,10 @@ def _resolve_label(name: str, labels: list[dict], force_case: bool) -> dict | st
         matches = [l for l in labels if l["name"].lower() == name.lower()]
 
     if not matches:
-        sample = ", ".join(l["name"] for l in labels[:8])
-        return f"Label '{name}' not found. Available: {sample}"
+        user_labels = [l for l in labels if l.get("type") == "user"]
+        sample_pool = user_labels if user_labels else labels
+        sample = ", ".join(l["name"] for l in sample_pool[:10])
+        return f"Label '{name}' not found. Your labels: {sample}"
     if len(matches) > 1:
         opts = ", ".join(m["name"] for m in matches)
         return f"Ambiguous label '{name}' — matches: {opts}. Use --force-label-case."
@@ -105,7 +114,7 @@ def _parse(text: str, labels: list[dict], categories: list[dict], force_case: bo
         return {"action": "soft-delete"}
 
     if text.startswith("move "):
-        label_name = text[5:].strip()
+        label_name = _strip_quotes(text[5:].strip())
         if not label_name:
             return {"error": "move requires a label name"}
         result = _resolve_label(label_name, labels, force_case)
@@ -132,7 +141,7 @@ def _parse(text: str, labels: list[dict], categories: list[dict], force_case: bo
         elif " move " in rest:
             idx = rest.rfind(" move ")
             category_text = rest[:idx].strip()
-            label_name = rest[idx + 6 :].strip()
+            label_name = _strip_quotes(rest[idx + 6 :].strip())
             resolved = _resolve_label(label_name, labels, force_case)
             if isinstance(resolved, str):
                 return {"error": resolved}
