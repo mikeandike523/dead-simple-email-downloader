@@ -94,8 +94,10 @@ def create_category(name: str) -> dict:
     return data["category"]
 
 
-_SUBJECT_MAX = 256
-_PREVIEW_MAX = 512
+_SUBJECT_MAX    = 256
+_PREVIEW_MAX    = 512
+_FROM_MAX       = 512
+_LABEL_NAME_MAX = 255
 
 
 def _trunc(value: str | None, max_chars: int) -> str | None:
@@ -111,16 +113,43 @@ def assign_category(
     category_id: int,
     subject: str | None = None,
     body_preview: str | None = None,
+    from_address: str | None = None,
 ) -> None:
-    """Assign a category to a message, storing subject and body preview for ML training."""
+    """Assign a category to a message, upserting email_content and recording the assignment."""
     _api(
         "POST",
         "/google/gmail/manage/assign",
         json={
-            "messageId": message_id,
-            "categoryId": category_id,
-            "subject": _trunc(subject, _SUBJECT_MAX),
+            "messageId":   message_id,
+            "categoryId":  category_id,
+            "subject":     _trunc(subject,      _SUBJECT_MAX),
             "bodyPreview": _trunc(body_preview, _PREVIEW_MAX),
+            "fromAddress": _trunc(from_address, _FROM_MAX),
+        },
+    )
+
+
+def record_action(
+    message_id: str,
+    action: str,
+    label_id: str | None = None,
+    label_name: str | None = None,
+    subject: str | None = None,
+    body_preview: str | None = None,
+    from_address: str | None = None,
+) -> None:
+    """Record the disposition taken on a message for ML training signal."""
+    _api(
+        "POST",
+        "/google/gmail/manage/action",
+        json={
+            "messageId":   message_id,
+            "action":      action,
+            "labelId":     label_id,
+            "labelName":   _trunc(label_name,   _LABEL_NAME_MAX),
+            "subject":     _trunc(subject,      _SUBJECT_MAX),
+            "bodyPreview": _trunc(body_preview, _PREVIEW_MAX),
+            "fromAddress": _trunc(from_address, _FROM_MAX),
         },
     )
 

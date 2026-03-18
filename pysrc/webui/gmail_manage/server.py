@@ -161,18 +161,23 @@ def run_server(force_label_case: bool = False) -> None:
         email = state["current_email"]
         if not email:
             return
-        msg_id = email["id"]
-        action = parsed["action"]
+        msg_id    = email["id"]
+        action    = parsed["action"]
         secondary = parsed.get("secondary")
         label_obj = parsed.get("label_obj")
-        cat = parsed.get("category")
+        cat       = parsed.get("category")
+
+        subject      = email.get("subject")
+        body_preview = email.get("snippet")
+        from_address = email.get("from")
 
         try:
             if action == "cat" and cat:
                 actions.assign_category(
                     msg_id, cat["id"],
-                    subject=email.get("subject"),
-                    body_preview=email.get("snippet"),
+                    subject=subject,
+                    body_preview=body_preview,
+                    from_address=from_address,
                 )
             if action == "hard-delete" or secondary == "hard-delete":
                 actions.hard_delete(msg_id)
@@ -183,6 +188,39 @@ def run_server(force_label_case: bool = False) -> None:
         except Exception as e:
             _emit_status(f"Action failed: {e}", "error")
             return
+
+        # Determine the disposition for the training signal.
+        if action == "hard-delete" or secondary == "hard-delete":
+            disposition = "hard_delete"
+            rec_label_id   = None
+            rec_label_name = None
+        elif action == "soft-delete" or secondary == "soft-delete":
+            disposition = "soft_delete"
+            rec_label_id   = None
+            rec_label_name = None
+        elif (action == "move" or secondary == "move") and label_obj:
+            disposition    = "move"
+            rec_label_id   = label_obj["id"]
+            rec_label_name = label_obj.get("name")
+        else:
+            # cat with no secondary — message stays in inbox
+            disposition    = "inbox"
+            rec_label_id   = None
+            rec_label_name = None
+
+        try:
+            actions.record_action(
+                msg_id,
+                disposition,
+                label_id=rec_label_id,
+                label_name=rec_label_name,
+                subject=subject,
+                body_preview=body_preview,
+                from_address=from_address,
+            )
+        except Exception:
+            # Recording is best-effort; Gmail action already succeeded.
+            pass
 
         state["processed"] += 1
         state["current_email"] = None
