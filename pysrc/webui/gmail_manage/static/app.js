@@ -16,6 +16,14 @@
   const cmdInput      = document.getElementById("cmd-input");
   const connDot       = document.getElementById("topbar-conn");
 
+  // ── Command history state ─────────────────────────────────────────────────
+  const cmdHistory = [];  // Most-recent command at index 0
+  let historyIdx   = -1;  // -1 = not browsing history
+  let inTypoGuard  = false;
+
+  // ── Current email state ───────────────────────────────────────────────────
+  let currentMessageId = null;
+
   // ── Socket.IO connection ──────────────────────────────────────────────────
   // Connect to the same host/port that served this page.
   const socket = io({ transports: ["websocket", "polling"] });
@@ -33,6 +41,7 @@
   // ── Incoming events ───────────────────────────────────────────────────────
 
   socket.on("email", (data) => {
+    currentMessageId = data.id || null;
     renderEmail(data);
     enableInput(true);
   });
@@ -43,6 +52,7 @@
 
   socket.on("status", (data) => {
     setStatus(data.msg || "", data.level || "info");
+    inTypoGuard = (data.level === "typo");
   });
 
   socket.on("done", (data) => {
@@ -64,8 +74,38 @@
     if (e.key === "Enter") {
       e.preventDefault();
       const text = cmdInput.value;
+      // Track history for top-level commands only (not typo-guard y/n/c responses)
+      if (text.trim() && !inTypoGuard) {
+        cmdHistory.unshift(text);
+      }
+      historyIdx = -1;
       cmdInput.value = "";
       socket.emit("command", { text });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (cmdHistory.length > 0) {
+        historyIdx = Math.min(historyIdx + 1, cmdHistory.length - 1);
+        cmdInput.value = cmdHistory[historyIdx];
+        // Move cursor to end
+        setTimeout(() => cmdInput.setSelectionRange(cmdInput.value.length, cmdInput.value.length), 0);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (historyIdx > 0) {
+        historyIdx--;
+        cmdInput.value = cmdHistory[historyIdx];
+      } else {
+        historyIdx = -1;
+        cmdInput.value = "";
+      }
+    }
+  });
+
+  // ── View full body ────────────────────────────────────────────────────────
+
+  emailContent.addEventListener("click", (e) => {
+    if (e.target.classList.contains("btn-view-body") && currentMessageId) {
+      window.open(`/email-body?messageId=${encodeURIComponent(currentMessageId)}`, "_blank");
     }
   });
 
@@ -92,6 +132,9 @@
       </div>
       <hr class="email-divider" />
       <p class="email-snippet">${esc(e.snippet || "")}</p>
+      <div class="email-body-row">
+        <button class="btn-view-body">View Full Body ↗</button>
+      </div>
       <hr class="email-divider" />
       <p class="email-footer">${esc(String(e.processed || 0))} processed · ~${esc(String(e.total || 0))} in inbox</p>`;
   }

@@ -7,12 +7,13 @@ All state is server-side; the browser is a dumb display + input box.
 from __future__ import annotations
 
 import os
+import re
 import socket
 import threading
 import time
 import webbrowser
 
-from flask import Flask, send_from_directory
+from flask import Flask, Response, request, send_from_directory
 from flask_socketio import SocketIO
 
 from pysrc.tui.gmail_manage import actions
@@ -23,6 +24,19 @@ from pysrc.tui.gmail_manage.app import (
 )
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+# 1x1 transparent GIF data URI used to replace blocked image sources.
+_BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+
+_IMG_SRC_RE = re.compile(
+    r'(<img[^>]*?\s)src\s*=\s*(["\'])https?://[^"\']*\2',
+    re.IGNORECASE,
+)
+
+
+def _strip_external_images(html: str) -> str:
+    """Replace external http(s) src attributes on img tags with a blank pixel."""
+    return _IMG_SRC_RE.sub(rf'\1src=\2{_BLANK_IMG}\2', html)
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +53,7 @@ def _find_free_port() -> int:
 # Server factory
 # ---------------------------------------------------------------------------
 
-def run_server(force_label_case: bool = False) -> None:
+def run_server(force_label_case: bool = False, hide_external_images: bool = False) -> None:
     port = _find_free_port()
     app = Flask(__name__)
     sio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
@@ -72,6 +86,33 @@ def run_server(force_label_case: bool = False) -> None:
     @app.route("/<path:filename>")
     def static_file(filename):
         return _no_cache(send_from_directory(STATIC_DIR, filename))
+
+    @app.route("/email-body")
+    def email_body_route():
+        message_id = request.args.get("messageId", "").strip()
+        if not message_id:
+            return Response("Missing messageId", status=400, content_type="text/plain")
+        try:
+            data = actions.fetch_email_body(message_id)
+        except Exception as e:
+            return Response(f"Error fetching email body:\n{e}", status=500, content_type="text/plain")
+
+        if "html" in data:
+            content = data["html"]
+            if hide_external_images:
+                content = _strip_external_images(content)
+            return _no_cache(Response(content, content_type="text/html; charset=utf-8"))
+
+        text = data.get("text", "(no body)")
+        escaped = (
+            text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        )
+        html_page = (
+            "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
+            "<style>body{font-family:monospace;white-space:pre-wrap;padding:20px;}</style>"
+            f"</head><body>{escaped}</body></html>"
+        )
+        return _no_cache(Response(html_page, content_type="text/html; charset=utf-8"))
 
     # ── Emit helpers (always safe to call from any thread) ───────────────────
 

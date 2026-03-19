@@ -261,7 +261,14 @@ def google_gmail_folders():
     default=False,
     help="Require exact label casing instead of case-insensitive matching.",
 )
-def google_gmail_manage(force_label_case):
+@click.option(
+    "--hide-external-images",
+    "hide_external_images",
+    is_flag=True,
+    default=False,
+    help="Strip external image sources when viewing full email bodies.",
+)
+def google_gmail_manage(force_label_case, hide_external_images):
     """Open the interactive inbox triage TUI.
 
     Triage emails one at a time: categorize for ML training, skip, move,
@@ -286,7 +293,7 @@ def google_gmail_manage(force_label_case):
     If a label typed in move commands is ambiguous due to case conflicts,
     re-run with --force-label-case to require exact casing.
     """
-    return impl_google_gmail_manage(force_label_case=force_label_case)
+    return impl_google_gmail_manage(force_label_case=force_label_case, hide_external_images=hide_external_images)
 
 
 # ---------------------------------------------------------------------------

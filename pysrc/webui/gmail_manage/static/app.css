@@ -123,6 +123,27 @@ html, body {
   font-size: 12px;
 }
 
+.email-body-row {
+  margin-bottom: 12px;
+}
+
+.btn-view-body {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--cyan);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-view-body:hover {
+  background: var(--bg-boost);
+  border-color: var(--cyan);
+}
+
 /* done / fatal states */
 .state-done {
   color: var(--green);

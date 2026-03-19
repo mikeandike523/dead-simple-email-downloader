@@ -168,3 +168,9 @@ def hard_delete(message_id: str) -> None:
 def move_to_label(message_id: str, label_id: str) -> None:
     """Move a message to a Gmail label (and remove from INBOX)."""
     _api("POST", "/google/gmail/manage/move", json={"messageId": message_id, "labelId": label_id})
+
+
+def fetch_email_body(message_id: str) -> dict:
+    """Fetch the full HTML/text body of a message. Returns {html: ...} or {text: ...}."""
+    route = f"/google/gmail/manage/body?{urlencode({'messageId': message_id})}"
+    return _api("GET", route)
