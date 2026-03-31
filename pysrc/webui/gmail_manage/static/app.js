@@ -10,22 +10,31 @@
   "use strict";
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
-  const emailContent  = document.getElementById("email-content");
+  const emailContent   = document.getElementById("email-content");
   const sidebarContent = document.getElementById("sidebar-content");
-  const statusText    = document.getElementById("status-text");
-  const cmdInput      = document.getElementById("cmd-input");
-  const connDot       = document.getElementById("topbar-conn");
+  const statusText     = document.getElementById("status-text");
+  const cmdInput       = document.getElementById("cmd-input");
+  const connDot        = document.getElementById("topbar-conn");
+  const completionsPop = document.getElementById("completions-popup");
 
   // ── Command history state ─────────────────────────────────────────────────
   const cmdHistory = [];  // Most-recent command at index 0
   let historyIdx   = -1;  // -1 = not browsing history
   let inTypoGuard  = false;
 
+  // ── Known labels / categories (updated from sidebar event) ───────────────
+  let knownLabels     = [];  // [{id, name, type?, ...}]
+  let knownCategories = [];  // [{id, name}]
+
+  // ── Tab-completion state ──────────────────────────────────────────────────
+  let completions    = [];   // String list of current matches
+  let completionIdx  = -1;   // Highlighted index (-1 = none)
+  let completionBase = null; // Input value when Tab was first pressed this cycle
+
   // ── Current email state ───────────────────────────────────────────────────
   let currentMessageId = null;
 
   // ── Socket.IO connection ──────────────────────────────────────────────────
-  // Connect to the same host/port that served this page.
   const socket = io({ transports: ["websocket", "polling"] });
 
   function setConnState(state) {
@@ -34,8 +43,8 @@
     connDot.title = labels[state] || state;
   }
 
-  socket.on("connect",    () => { setConnState("connected"); enableInput(true); });
-  socket.on("disconnect", () => { setConnState("disconnected"); enableInput(false); });
+  socket.on("connect",      () => { setConnState("connected"); enableInput(true); });
+  socket.on("disconnect",   () => { setConnState("disconnected"); enableInput(false); });
   socket.on("connect_error", () => setConnState("disconnected"));
 
   // ── Incoming events ───────────────────────────────────────────────────────
@@ -47,7 +56,9 @@
   });
 
   socket.on("sidebar", (data) => {
-    renderSidebar(data.labels || [], data.categories || []);
+    knownLabels     = data.labels     || [];
+    knownCategories = data.categories || [];
+    renderSidebar(knownLabels, knownCategories);
   });
 
   socket.on("status", (data) => {
@@ -68,37 +79,213 @@
     enableInput(false);
   });
 
-  // ── Command input ─────────────────────────────────────────────────────────
+  // ── Tab completion ────────────────────────────────────────────────────────
+
+  const PRIMARY_CMDS   = ["cat", "hard-delete", "soft-delete", "move", "skip"];
+  const SECONDARY_CMDS = ["hard-delete", "soft-delete", "move"];
+
+  /**
+   * Determine what part of the input is being completed.
+   * Returns { prefix, partial, type } or null if no completion context applies.
+   *   prefix  — the part of the input that stays unchanged
+   *   partial — the token currently being typed (to filter candidates against)
+   *   type    — "command" | "category" | "label" | "secondary"
+   */
+  function getCompletionContext(value) {
+    let m;
+
+    // "cat <category> move <label-partial>"
+    m = value.match(/^(cat\s+\S+\s+move\s+)(\S*)$/i);
+    if (m) return { prefix: m[1], partial: m[2], type: "label" };
+
+    // "cat <category> <secondary-partial>"  (category already complete)
+    m = value.match(/^(cat\s+\S+\s+)(\S*)$/i);
+    if (m) return { prefix: m[1], partial: m[2], type: "secondary" };
+
+    // "move <label-partial>"
+    m = value.match(/^(move\s+)(\S*)$/i);
+    if (m) return { prefix: m[1], partial: m[2], type: "label" };
+
+    // "cat <category-partial>"
+    m = value.match(/^(cat\s+)(\S*)$/i);
+    if (m) return { prefix: m[1], partial: m[2], type: "category" };
+
+    // First word (no space yet)
+    if (!value.includes(" ")) {
+      return { prefix: "", partial: value, type: "command" };
+    }
+
+    return null;
+  }
+
+  function getCandidates(type) {
+    switch (type) {
+      case "command":   return PRIMARY_CMDS.slice();
+      case "secondary": return SECONDARY_CMDS.slice();
+      case "category":  return knownCategories.map(c => c.name);
+      case "label":     return knownLabels.map(l => l.name);
+      default:          return [];
+    }
+  }
+
+  function computeCompletions(value) {
+    if (inTypoGuard) return [];
+    const ctx = getCompletionContext(value);
+    if (!ctx) return [];
+    const partial = ctx.partial.toLowerCase();
+    return getCandidates(ctx.type).filter(c => c.toLowerCase().startsWith(partial));
+  }
+
+  function applyCompletion(baseValue, completion) {
+    const ctx = getCompletionContext(baseValue);
+    if (!ctx) return;
+    cmdInput.value = ctx.prefix + completion + " ";
+  }
+
+  // ── Completion popup rendering ────────────────────────────────────────────
+
+  function renderCompletionPopup() {
+    if (completions.length === 0) { hideCompletionPopup(); return; }
+
+    let html = completions.map((item, i) => {
+      const cls = i === completionIdx ? "completion-item active" : "completion-item";
+      return `<div class="${cls}" data-idx="${i}">${esc(item)}</div>`;
+    }).join("");
+
+    if (completions.length > 1) {
+      html += `<div class="completion-hint">Tab / ↑↓ to cycle · Esc to cancel</div>`;
+    }
+
+    completionsPop.hidden = false;
+    completionsPop.innerHTML = html;
+
+    // Scroll active item into view
+    const active = completionsPop.querySelector(".active");
+    if (active) active.scrollIntoView({ block: "nearest" });
+  }
+
+  function hideCompletionPopup() {
+    completionsPop.hidden = true;
+    completionsPop.innerHTML = "";
+  }
+
+  function resetCompletion() {
+    completions    = [];
+    completionIdx  = -1;
+    completionBase = null;
+    hideCompletionPopup();
+  }
+
+  // Click on a popup item to accept it
+  completionsPop.addEventListener("mousedown", (e) => {
+    const item = e.target.closest(".completion-item");
+    if (!item) return;
+    e.preventDefault();  // keep input focused
+    const idx = parseInt(item.dataset.idx, 10);
+    if (!isNaN(idx) && completionBase !== null && completions[idx]) {
+      applyCompletion(completionBase, completions[idx]);
+    }
+    resetCompletion();
+  });
+
+  // ── Command input keydown ─────────────────────────────────────────────────
 
   cmdInput.addEventListener("keydown", (e) => {
+    const popupOpen = !completionsPop.hidden;
+
+    // ── Tab: cycle through completions ─────────────────────────────────────
+    if (e.key === "Tab") {
+      e.preventDefault();
+
+      if (completionBase === null) {
+        // Start a fresh completion cycle
+        completionBase = cmdInput.value;
+        completions    = computeCompletions(completionBase);
+        completionIdx  = -1;
+      }
+
+      if (completions.length === 0) { resetCompletion(); return; }
+
+      if (e.shiftKey) {
+        // Shift+Tab: cycle backward
+        completionIdx = completionIdx <= 0 ? completions.length - 1 : completionIdx - 1;
+      } else {
+        // Tab: cycle forward
+        completionIdx = (completionIdx + 1) % completions.length;
+      }
+
+      applyCompletion(completionBase, completions[completionIdx]);
+
+      if (completions.length > 1) {
+        renderCompletionPopup();
+      } else {
+        // Single match — apply and close immediately
+        resetCompletion();
+      }
+      return;
+    }
+
+    // ── Escape: cancel completion, restore original input ──────────────────
+    if (e.key === "Escape") {
+      if (popupOpen) {
+        e.preventDefault();
+        if (completionBase !== null) cmdInput.value = completionBase;
+        resetCompletion();
+      }
+      return;
+    }
+
+    // ── Arrow keys: navigate popup (when open) or history (when closed) ────
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (popupOpen) {
+        completionIdx = (completionIdx + 1) % completions.length;
+        applyCompletion(completionBase, completions[completionIdx]);
+        renderCompletionPopup();
+      } else {
+        if (historyIdx > 0) {
+          historyIdx--;
+          cmdInput.value = cmdHistory[historyIdx];
+        } else {
+          historyIdx = -1;
+          cmdInput.value = "";
+        }
+      }
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (popupOpen) {
+        completionIdx = completionIdx <= 0 ? completions.length - 1 : completionIdx - 1;
+        applyCompletion(completionBase, completions[completionIdx]);
+        renderCompletionPopup();
+      } else {
+        if (cmdHistory.length > 0) {
+          historyIdx = Math.min(historyIdx + 1, cmdHistory.length - 1);
+          cmdInput.value = cmdHistory[historyIdx];
+          setTimeout(() => cmdInput.setSelectionRange(cmdInput.value.length, cmdInput.value.length), 0);
+        }
+      }
+      return;
+    }
+
+    // ── Enter: always submit (closing popup first if open) ─────────────────
     if (e.key === "Enter") {
       e.preventDefault();
+      resetCompletion();
       const text = cmdInput.value;
-      // Track history for top-level commands only (not typo-guard y/n/c responses)
       if (text.trim() && !inTypoGuard) {
         cmdHistory.unshift(text);
       }
-      historyIdx = -1;
+      historyIdx    = -1;
       cmdInput.value = "";
       socket.emit("command", { text });
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (cmdHistory.length > 0) {
-        historyIdx = Math.min(historyIdx + 1, cmdHistory.length - 1);
-        cmdInput.value = cmdHistory[historyIdx];
-        // Move cursor to end
-        setTimeout(() => cmdInput.setSelectionRange(cmdInput.value.length, cmdInput.value.length), 0);
-      }
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (historyIdx > 0) {
-        historyIdx--;
-        cmdInput.value = cmdHistory[historyIdx];
-      } else {
-        historyIdx = -1;
-        cmdInput.value = "";
-      }
+      return;
     }
+
+    // ── Any other key: close popup (keep current applied text) ────────────
+    resetCompletion();
   });
 
   // ── View full body ────────────────────────────────────────────────────────
@@ -178,7 +365,6 @@
 
   function setStatus(msg, level) {
     statusText.textContent = msg;
-    // Remove all level classes then apply the new one
     statusText.className = `level-${level}`;
   }
 

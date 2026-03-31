@@ -230,6 +230,7 @@ html, body {
 }
 
 #input-row {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 8px 14px;
@@ -284,6 +285,50 @@ html, body {
 #status-text.level-warning { color: var(--yellow); }
 #status-text.level-error   { color: var(--red); }
 #status-text.level-typo    { color: var(--orange); }
+
+/* ── Tab-completion popup ────────────────────────────────────────────────── */
+#completions-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-boost);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow-y: auto;
+  max-height: 220px;
+  z-index: 50;
+  font-size: 13px;
+  scrollbar-width: thin;
+}
+
+.completion-item {
+  padding: 4px 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+.completion-item.active {
+  background: var(--bg-pane);
+  color: var(--cyan);
+}
+
+.completion-item:hover:not(.active) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.completion-hint {
+  padding: 3px 14px 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+  text-align: right;
+}
 
 /* ── Scrollbar styling ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
